@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ghodss/yaml"
@@ -25,11 +24,7 @@ import (
 )
 
 type (
-
-	// Timestamp is a helper for (un)marhalling time
-	Timestamp time.Time
-
-	// HookMessage is the message we receive from Alertmanager
+	Timestamp   time.Time
 	HookMessage struct {
 		Version           string            `json:"version"`
 		GroupKey          string            `json:"groupKey"`
@@ -53,13 +48,6 @@ type (
 		clientset                 kubernetes.Clientset
 		job_destination_namespace string
 		configmap_namespace       string
-	}
-
-	//Alert store to check incoming alerts
-	alertStore struct {
-		sync.Mutex
-		capacity int
-		alerts   []*HookMessage
 	}
 )
 
@@ -87,13 +75,9 @@ func main() {
 
 	current_namespace := string(namespace_dat)
 
-	// Overwrite the job namespace destination, if ommited, current namespace will be used
 	configmap_namespace := flag.String("configmap_namespace", current_namespace, "Kubernetes namespace where jobs are defined")
 	job_destination_namespace := flag.String("job_destination_namespace", current_namespace, "Kubernetes namespace where jobs will be created")
-	// configMap where job definitions are stored
-	//responses_configmap := flag.String("responses_configmap", "receiver-job-definitions", "Configmap containing response YAML job definitions")
 
-	// Creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())
@@ -111,17 +95,7 @@ func main() {
 	}
 
 	addr := flag.String("addr", ":8080", "address to listen for webhook")
-	// capacity := flag.Int("cap", 64, "capacity of the simple alerts store")
 	flag.Parse()
-
-	//TODO: Implement that each alert is going to be stored
-	/*
-		each alert should be stored until to the maximum of the capacity
-		after that the last alert should be dropped
-	*/
-	// store := &alertStore{
-	// 	capacity: *capacity,
-	// }
 
 	scheduler := gocron.NewScheduler(time.UTC)
 	cleanupjob, _ := scheduler.Every("5m").Do(server.cleanupJobs)
@@ -154,19 +128,6 @@ func readinessHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "ok\n")
 }
 
-func (store alertStore) storeAlert(message HookMessage) {
-	store.Lock()
-	defer store.Unlock()
-
-	store.alerts = append(store.alerts, &message)
-
-	if len(store.alerts) > store.capacity {
-		a := store.alerts
-		_, a = a[0], a[1:]
-		store.alerts = a
-	}
-}
-
 func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -190,7 +151,7 @@ func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httpre
 	}
 }
 
-//Handling the Prometheus-Alertmanager Post-Requests
+//Handling the Alertmanager Post-Requests
 func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 
 	dec := json.NewDecoder(httprequest.Body)
@@ -226,10 +187,6 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 	}
 
 	fmt.Println(message.CommonLabels["namespace"])
-}
-
-func ToString(alertcount int) {
-	panic("unimplemented")
 }
 
 func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
