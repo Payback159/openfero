@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openfero-kubequotaalmostfull-firing
+  labels:
+    app: openfero
+data:
+  KubeQuotaAlmostFull: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: openfero-kubequotaalmostfull-firing
+      labels:
+        app: openfero
+    spec:
+      parallelism: 1
+      completions: 1
+      template:
+          labels:
+            app: openfero
+          spec:
+            containers:
+            - name: python-job
+              image: ubuntu:latest
+              args:
+              - bash
+              - -c
+              - |-
+                echo "Hallo Welt"
+            imagePullPolicy: Always
+            restartPolicy: Never
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openfero-kubequotaalmostfull-resolved
+  labels:
+    app: openfero
+    openfero/job-disabled: "true"
+data:
+  KubeQuotaAlmostFull: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: openfero-kubequotaalmostfull-resolved
+      labels:
+        app: openfero
+    spec:
+      parallelism: 1
+      completions: 1
+      template:
+          labels:
+            app: openfero
+          spec:
+            containers:
+            - name: python-job
+              image: ubuntu:latest
+              args:
+              - bash
+              - -c
+              - |-
+                echo "Hallo Welt"
+            imagePullPolicy: Always
+            restartPolicy: Never

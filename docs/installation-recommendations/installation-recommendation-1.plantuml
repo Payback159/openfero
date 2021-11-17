@@ -1,0 +1,31 @@
+@startuml InstallationRecommendation1
+rectangle NamespaceA {
+  component OpenFeroA
+  component ApplicationA
+  artifact JobDefinitionA
+  agent RemediationJobA
+
+  OpenFeroA --> JobDefinitionA : read definition
+  OpenFeroA --> RemediationJobA: spawn
+  RemediationJobA --> ApplicationA : remediate
+}
+
+rectangle NamespaceB {
+  component OpenFeroB
+  component ApplicationB
+  artifact JobDefinitionB
+  agent RemediationJobB
+
+  OpenFeroB --> JobDefinitionB : read definition
+  OpenFeroB --> RemediationJobB: spawn
+  RemediationJobB --> ApplicationB : remediate
+}
+
+rectangle Monitoring {
+  component Prometheus
+  component Alertmanager
+  Prometheus --> Alertmanager : notify
+  Alertmanager --> OpenFeroA : send alert
+  Alertmanager --> OpenFeroB : send alert
+}
+@enduml

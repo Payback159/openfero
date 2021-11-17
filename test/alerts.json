@@ -1,0 +1,104 @@
+{
+    "version": "4",
+    "groupKey": "{}/{alertname=\"KubeQuotaAlmostFull\"}:{alertname=\"KubeQuotaAlmostFull\", severity=\"info\", stage=\"dev\", zone=\"dmz\"}",
+    "status": "firing",
+    "receiver": "namespace-resizer",
+    "groupLabels": {
+        "alertname": "KubeQuotaAlmostFull",
+        "severity": "info",
+        "stage": "dev",
+        "zone": "dmz"
+    },
+    "commonLabels": {
+        "alertname": "KubeQuotaAlmostFull",
+        "cluster": "dev-dmz",
+        "container": "kube-state-metrics",
+        "endpoint": "http",
+        "pod": "mmop-kube-state-metrics-79fb6b966c-xrkgb",
+        "prometheus": "monitoring/mmop-kube-prometheus-stack-prometheus",
+        "resourcequota": "std-quota",
+        "service": "mmop-kube-state-metrics",
+        "severity": "info",
+        "stage": "dev",
+        "zone": "dmz"
+    },
+    "commonAnnotations": {
+        "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubequotaalmostfull",
+        "summary": "Namespace quota is going to be full."
+    },
+    "externalURL": "http://alertmanager.example.com",
+    "alerts": [
+        {
+            "labels": {
+                "alertname": "KubeQuotaAlmostFull",
+                "cluster": "dev-dmz",
+                "container": "kube-state-metrics",
+                "endpoint": "http",
+                "namespace": "namespace-a",
+                "pod": "mmop-kube-state-metrics-79fb6b966c-xrkgb",
+                "prometheus": "monitoring/mmop-kube-prometheus-stack-prometheus",
+                "resource": "requests.cpu",
+                "resourcequota": "std-quota",
+                "service": "mmop-kube-state-metrics",
+                "severity": "info",
+                "stage": "dev",
+                "zone": "dmz"
+            },
+            "annotations": {
+                "description": "Namespace namespace-a is using 92.85% of its requests.cpu quota.",
+                "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubequotaalmostfull",
+                "summary": "Namespace quota is going to be full."
+            },
+            "startsAt": "2021-10-25T12:01:24.29524738Z",
+            "EndsAt": "0001-01-01T00:00:00Z"
+        },
+        {
+            "labels": {
+                "alertname": "KubeQuotaAlmostFull",
+                "cluster": "dev-dmz",
+                "container": "kube-state-metrics",
+                "endpoint": "http",
+                "namespace": "namespace-b",
+                "pod": "mmop-kube-state-metrics-79fb6b966c-xrkgb",
+                "prometheus": "monitoring/mmop-kube-prometheus-stack-prometheus",
+                "resource": "requests.storage",
+                "resourcequota": "std-quota",
+                "service": "mmop-kube-state-metrics",
+                "severity": "info",
+                "stage": "dev",
+                "zone": "dmz"
+            },
+            "annotations": {
+                "description": "Namespace namespace-b is using 92.48% of its requests.storage quota.",
+                "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubequotaalmostfull",
+                "summary": "Namespace quota is going to be full."
+            },
+            "startsAt": "2021-10-25T12:01:24.29524738Z",
+            "EndsAt": "0001-01-01T00:00:00Z"
+        },
+        {
+            "labels": {
+                "alertname": "KubeQuotaAlmostFull",
+                "cluster": "dev-dmz",
+                "container": "kube-state-metrics",
+                "endpoint": "http",
+                "namespace": "namespace-c",
+                "pod": "mmop-kube-state-metrics-79fb6b966c-xrkgb",
+                "prometheus": "monitoring/mmop-kube-prometheus-stack-prometheus",
+                "resource": "limits.memory",
+                "resourcequota": "std-quota",
+                "service": "mmop-kube-state-metrics",
+                "severity": "info",
+                "stage": "dev",
+                "zone": "dmz"
+            },
+            "annotations": {
+                "description": "Namespace namespace-c is using 95% of its limits.memory quota.",
+                "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubequotaalmostfull",
+                "summary": "Namespace quota is going to be full."
+            },
+            "startsAt": "2021-10-25T12:01:24.29524738Z",
+            "EndsAt": "0001-01-01T00:00:00Z"
+        }
+    ]
+}

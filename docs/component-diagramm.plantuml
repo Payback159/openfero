@@ -1,0 +1,15 @@
+@startuml OpenFero-ComponentDiagram
+package "Prometheus-Stack" {
+  [Prometheus] ..> [Alertmanager] : notify
+}
+
+package "OpenFero" {
+  [Alertmanager] ..> [OpenFero] : send alert via webhook
+}
+
+node "Kubernetes" {
+  [OpenFero] ..> [Kubernetes API] : read Job definition from ConfigMap
+  [OpenFero] ..> [Kubernetes API] : create Job from ConfigMap
+  [Kubernetes API] ..> [Kubelet] : run Job
+}
+@enduml
