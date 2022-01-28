@@ -92,11 +92,12 @@ jobs:
         # against the sigstore community Fulcio instance.
       #  run: cosign sign ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
       
-      - name: Create PreRelease 
+      - name: Create PreRelease
+        id: create_release
         uses: "actions/create-release@v1"
         with:
           prerelease: true
           release_name: "latest"
-          tag_name: ${{ github.ref }}
+          commitish: true
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
