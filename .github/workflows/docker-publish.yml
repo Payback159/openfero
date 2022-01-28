@@ -100,5 +100,5 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: "latest"
           body: "Last state of development"
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+     #   env:
+     #     GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
