@@ -101,6 +101,7 @@ jobs:
           tag: latest
           commit: main
           allowUpdates: true
+          generateReleaseNotes: true
 
       - name: Create tagged release
         uses: ncipollo/release-action@v1
@@ -108,3 +109,4 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           body: "openfero ${{ env.RELEASE_VERSION }}"
+          generateReleaseNotes: true
