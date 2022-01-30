@@ -91,14 +91,10 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
       #  run: cosign sign ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
-      
-      - name: Create PreRelease
-        id: create_release
-        uses: "actions/create-release@v1"
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: "last state of development"
           prerelease: true
-          tag_name: ${{ github.ref }}
-          release_name: "latest"
-          body: "Last state of development"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
