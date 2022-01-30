@@ -6,14 +6,10 @@ name: build-and-publish-pre-release
 # documentation.
 
 on:
-  schedule:
-    - cron: '43 23 * * *'
   push:
     branches: [ main ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
-  pull_request:
-    branches: [ main ]
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -36,6 +32,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
 
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
@@ -92,11 +91,20 @@ jobs:
         # against the sigstore community Fulcio instance.
       #  run: cosign sign ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
 
-      - name: Create Release
+      - name: Create PreRelease
         uses: ncipollo/release-action@v1
+        if: "!startsWith(github.event.ref, 'refs/tags/v')"
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           body: "last state of development"
           prerelease: true
           tag: latest
           commit: main
+          allowUpdates: true
+
+      - name: Create tagged release
+        uses: ncipollo/release-action@v1
+        if: "startsWith(github.event.ref, 'refs/tags/v')"
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: "openfero ${{ env.RELEASE_VERSION }}"
