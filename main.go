@@ -164,8 +164,11 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 		return
 	}
 
-	status := message.Status
-	alertname := message.CommonLabels["alertname"]
+	status := strings.Replace(message.Status, "\n", "", -1)
+	status = strings.Replace(status, "\r", "", -1)
+
+	alertname := strings.Replace(message.CommonLabels["alertname"], "\n", "", -1)
+	alertname = strings.Replace(alertname, "\r", "", -1)
 	alertcount := len(message.Alerts)
 
 	log.Printf("Webhook received: " + alertname + "[" + status + "] with " + fmt.Sprint(alertcount) + " Alerts")
