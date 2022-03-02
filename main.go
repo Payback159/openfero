@@ -180,22 +180,21 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 		log.Printf("Annotation key[%s] value[%s]\n", annotationkey, annotationvalue)
 	}
 
-	if status == "resolved" {
-		server.createResponseJob(message, status, httpwriter)
-	} else if status == "firing" {
+	if status == "resolved" || status == "firing" {
+		log.Printf("Create ResponseJobs for %s", alertname)
 		server.createResponseJob(message, status, httpwriter)
 	} else {
 		log.Printf("Received alarm without correct response configuration, ommiting reponses.")
 		return
 	}
 
-	fmt.Println(message.CommonLabels["namespace"])
 }
 
 func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
 
 	alertname := message.CommonLabels["alertname"]
 	responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
+	log.Printf("Try to load configmap with for the job " + responses_configmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("error while retrieving the configMap: "+responses_configmap, err)

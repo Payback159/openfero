@@ -22,9 +22,9 @@ help:
 .DEFAULT_GOAL := all
 
 build:
-		@docker build --pull --build-arg GO_VERS=${govers} -t ${IMAGEFULLNAME} .
+		@lima nerdctl build --pull --build-arg GO_VERS=${govers} -t ${IMAGEFULLNAME} .
 
 push:
-		@docker push ${IMAGEFULLNAME}
+		@lima nerdctl push ${IMAGEFULLNAME}
 
 all: build push
