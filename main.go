@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/ghodss/yaml"
 	batchv1 "k8s.io/api/batch/v1"
@@ -58,19 +59,19 @@ var seededRand *rand.Rand = rand.New(
 )
 
 func main() {
-	log.Printf("Starting webhook receiver")
+	//activate json logging
+	log.SetFormatter(&log.JSONFormatter{})
+	log.Info("Starting webhook receiver")
 
 	// Extract the current namespace from the mounted secrets
 	default_k8s_namespace_location := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	if _, err := os.Stat(default_k8s_namespace_location); os.IsNotExist(err) {
-		log.Printf("Current kubernetes namespace could not be found")
-		panic(err.Error())
+		log.Panic("Current kubernetes namespace could not be found", err.Error())
 	}
 
 	namespace_dat, err := ioutil.ReadFile(default_k8s_namespace_location)
 	if err != nil {
-		log.Printf("Couldn't read from %s", default_k8s_namespace_location)
-		panic(err.Error())
+		log.Panic("Couldn't read from %s", default_k8s_namespace_location, err.Error())
 	}
 
 	current_namespace := string(namespace_dat)
@@ -121,11 +122,13 @@ func StringWithCharset(length int, charset string) string {
 //handling healthness probe
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "ok\n")
+	log.Info("Health request answered")
 }
 
 //handling readiness probe
 func readinessHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "ok\n")
+	log.Info("Readiness request answered")
 }
 
 func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +150,7 @@ func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httpre
 	httpwriter.WriteHeader(http.StatusOK)
 
 	if err := enc.Encode("OK"); err != nil {
-		log.Printf("error encoding messages: %v", err)
+		log.Error("error encoding messages: %v", err)
 	}
 }
 
@@ -159,7 +162,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	var message HookMessage
 	if err := dec.Decode(&message); err != nil {
-		log.Printf("error decoding message: %v", err)
+		log.Error("error decoding message: %v", err)
 		http.Error(httpwriter, "invalid request body", 400)
 		return
 	}
@@ -171,20 +174,20 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 	alertname = strings.Replace(alertname, "\r", "", -1)
 	alertcount := len(message.Alerts)
 
-	log.Printf("Webhook received: " + alertname + "[" + status + "] with " + fmt.Sprint(alertcount) + " Alerts")
+	log.Info("Webhook received: " + alertname + "[" + status + "] with " + fmt.Sprint(alertcount) + " Alerts")
 
 	for labelkey, labelvalue := range message.CommonLabels {
-		log.Printf("Label key[%s] value[%s]\n", labelkey, labelvalue)
+		log.Info("Label key[%s] value[%s]\n", labelkey, labelvalue)
 	}
 	for annotationkey, annotationvalue := range message.CommonAnnotations {
-		log.Printf("Annotation key[%s] value[%s]\n", annotationkey, annotationvalue)
+		log.Info("Annotation key[%s] value[%s]\n", annotationkey, annotationvalue)
 	}
 
 	if status == "resolved" || status == "firing" {
-		log.Printf("Create ResponseJobs for %s", alertname)
+		log.Info("Create ResponseJobs for %s", alertname)
 		server.createResponseJob(message, status, httpwriter)
 	} else {
-		log.Printf("Received alarm without correct response configuration, ommiting reponses.")
+		log.Warn("Received alarm without correct response configuration, ommiting reponses.")
 		return
 	}
 
@@ -194,16 +197,16 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 
 	alertname := message.CommonLabels["alertname"]
 	responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
-	log.Printf("Try to load configmap %s", responses_configmap)
+	log.Info("Try to load configmap %s", responses_configmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
 	if err != nil {
-		log.Printf("error while retrieving the configMap: "+responses_configmap, err)
+		log.Error("error while retrieving the configMap: "+responses_configmap, err)
 		http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", http.StatusInternalServerError)
 		return
 	}
 
 	if configMap.Labels["openfero/job-disabled"] != "" {
-		log.Printf("Found openfero/job-disabled label in job-configmap %s", configMap.Name)
+		log.Info("Found openfero/job-disabled label in job-configmap %s", configMap.Name)
 		return
 	}
 
@@ -212,7 +215,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	if job_definition != "" {
 		yaml_job_definition = []byte(job_definition)
 	} else {
-		log.Printf("Could not find a data block with %s the name in the configmap.", alertname)
+		log.Error("Could not find a data block with %s the name in the configmap.", alertname)
 		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 		return
 	}
@@ -221,7 +224,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	// convert the yaml to json so it works with Unmarshal
 	jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
 	if err != nil {
-		log.Printf("error while converting YAML job definition to JSON: %v", err)
+		log.Error("error while converting YAML job definition to JSON: %v", err)
 		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 		return
 	}
@@ -232,7 +235,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jobObject := &batchv1.Job{}
 		err = json.Unmarshal(jsonBytes, jobObject)
 		if err != nil {
-			log.Printf("Error while using unmarshal on received job: %v", err)
+			log.Error("Error while using unmarshal on received job: %v", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			return
 		}
@@ -240,7 +243,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		//Adding randomString to avoid name conflict
 		jobObject.SetName(jobObject.Name + "-" + randomstring)
 		//Adding Labels as Environment variables
-		log.Printf("Adding Alert-Labels as environment variable to job %s", jobObject.Name)
+		log.Info("Adding Alert-Labels as environment variable to job %s", jobObject.Name)
 		for labelkey, labelvalue := range message.Alerts[alert].Labels {
 			jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
 		}
@@ -249,14 +252,14 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jobsClient := server.clientset.BatchV1().Jobs(server.job_destination_namespace)
 
 		// Create job
-		log.Printf("Creating job %s", jobObject.Name)
+		log.Info("Creating job %s", jobObject.Name)
 		_, err := jobsClient.Create(jobObject)
 		if err != nil {
-			log.Printf("error creating job: %v", err)
+			log.Error("error creating job: %v", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Created job %s", jobObject.Name)
+		log.Info("Created job %s", jobObject.Name)
 	}
 }
 
@@ -269,10 +272,10 @@ func (server *clientsetStruct) cleanupJobs() {
 
 	for _, job := range jobs.Items {
 		if job.Status.Active > 0 {
-			log.Printf("Job %v is running", job.Name)
+			log.Info("Job %v is running", job.Name)
 		} else {
 			if job.Status.Succeeded > 0 {
-				log.Printf("Job %v succeeded... going to cleanup", job.Name)
+				log.Info("Job %v succeeded... going to cleanup", job.Name)
 				jobClient.Delete(job.Name, &deleteOptions)
 			}
 		}
