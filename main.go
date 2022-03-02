@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -226,6 +227,11 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		err = json.Unmarshal(jsonBytes, jobObject)
 		if err != nil {
 			log.Printf("Error while using unmarshal on received job: %v", err)
+			http.Error(httpwriter, "Webhook error creating a job", 500)
+			return
+		}
+		if !reflect.DeepEqual(jobObject, batchv1.Job{}) {
+			log.Printf("Error while DeepEqual check")
 			http.Error(httpwriter, "Webhook error creating a job", 500)
 			return
 		}
