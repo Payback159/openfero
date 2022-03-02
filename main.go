@@ -198,7 +198,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("error while retrieving the configMap: "+responses_configmap, err)
-		http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", 500)
+		http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", http.StatusInternalServerError)
 		return
 	}
 
@@ -208,14 +208,21 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	}
 
 	job_definition := configMap.Data[alertname]
-	yaml_job_definition := []byte(job_definition)
+	var yaml_job_definition []byte
+	if job_definition != "" {
+		yaml_job_definition = []byte(job_definition)
+	} else {
+		log.Printf("Could not find a data block with %s the name in the configmap.", alertname)
+		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
+		return
+	}
 
 	// yaml_job_definition contains a []byte of the yaml job spec
 	// convert the yaml to json so it works with Unmarshal
 	jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
 	if err != nil {
 		log.Printf("error while converting YAML job definition to JSON: %v", err)
-		http.Error(httpwriter, "Webhook error creating a job", 500)
+		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 		return
 	}
 
@@ -226,7 +233,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		err = json.Unmarshal(jsonBytes, jobObject)
 		if err != nil {
 			log.Printf("Error while using unmarshal on received job: %v", err)
-			http.Error(httpwriter, "Webhook error creating a job", 500)
+			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			return
 		}
 
@@ -242,14 +249,14 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jobsClient := server.clientset.BatchV1().Jobs(server.job_destination_namespace)
 
 		// Create job
-		log.Printf("Creating job... ")
-		result, err := jobsClient.Create(jobObject)
+		log.Printf("Creating job %s", jobObject.Name)
+		_, err := jobsClient.Create(jobObject)
 		if err != nil {
 			log.Printf("error creating job: %v", err)
-			http.Error(httpwriter, "Webhook error creating a job", 500)
+			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Created job -->\n %q.", result)
+		log.Printf("Created job %s", jobObject.Name)
 	}
 }
 
