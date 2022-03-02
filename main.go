@@ -194,7 +194,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 
 	alertname := message.CommonLabels["alertname"]
 	responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
-	log.Printf("Try to load configmap with for the job " + responses_configmap)
+	log.Printf("Try to load configmap %s", responses_configmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("error while retrieving the configMap: "+responses_configmap, err)
@@ -233,6 +233,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		//Adding randomString to avoid name conflict
 		jobObject.SetName(jobObject.Name + "-" + randomstring)
 		//Adding Labels as Environment variables
+		log.Printf("Adding Alert-Labels as environment variable to job %s", jobObject.Name)
 		for labelkey, labelvalue := range message.Alerts[alert].Labels {
 			jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
 		}
