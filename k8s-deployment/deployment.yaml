@@ -23,7 +23,7 @@ spec:
         app: openfero
     spec:
       containers:
-      - image: openfero
+      - image: ghcr.io/payback159/openfero:main
         imagePullPolicy: Always
         name: openfero
         resources: {}
