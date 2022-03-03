@@ -71,7 +71,7 @@ func main() {
 
 	namespace_dat, err := ioutil.ReadFile(default_k8s_namespace_location)
 	if err != nil {
-		log.Panic("Couldn't read from %s", default_k8s_namespace_location, err.Error())
+		log.Panic("Couldn't read from "+default_k8s_namespace_location, err.Error())
 	}
 
 	current_namespace := string(namespace_dat)
@@ -150,7 +150,7 @@ func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httpre
 	httpwriter.WriteHeader(http.StatusOK)
 
 	if err := enc.Encode("OK"); err != nil {
-		log.Error("error encoding messages: %v", err)
+		log.Error("error encoding messages: ", err)
 	}
 }
 
@@ -162,7 +162,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	var message HookMessage
 	if err := dec.Decode(&message); err != nil {
-		log.Error("error decoding message: %v", err)
+		log.Error("error decoding message: ", err)
 		http.Error(httpwriter, "invalid request body", 400)
 		return
 	}
@@ -176,15 +176,21 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	log.Info("Webhook received: " + alertname + "[" + status + "] with " + fmt.Sprint(alertcount) + " Alerts")
 
+	//Crafting log entry for alert labels
+	var ll *log.Entry
 	for labelkey, labelvalue := range message.CommonLabels {
-		log.Info("Label key[%s] value[%s]\n", labelkey, labelvalue)
+		ll = log.WithFields(log.Fields{labelkey: labelvalue})
 	}
+	ll.Info("Label logging for " + alertname)
+
+	var al *log.Entry
 	for annotationkey, annotationvalue := range message.CommonAnnotations {
-		log.Info("Annotation key[%s] value[%s]\n", annotationkey, annotationvalue)
+		al = log.WithFields(log.Fields{annotationkey: annotationvalue})
 	}
+	al.Info("Annotations logging for " + alertname)
 
 	if status == "resolved" || status == "firing" {
-		log.Info("Create ResponseJobs for %s", alertname)
+		log.Info("Create ResponseJobs for " + alertname)
 		server.createResponseJob(message, status, httpwriter)
 	} else {
 		log.Warn("Received alarm without correct response configuration, ommiting reponses.")
@@ -197,7 +203,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 
 	alertname := message.CommonLabels["alertname"]
 	responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
-	log.Info("Try to load configmap %s", responses_configmap)
+	log.Info("Try to load configmap " + responses_configmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
 	if err != nil {
 		log.Error("error while retrieving the configMap: "+responses_configmap, err)
@@ -206,7 +212,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	}
 
 	if configMap.Labels["openfero/job-disabled"] != "" {
-		log.Info("Found openfero/job-disabled label in job-configmap %s", configMap.Name)
+		log.Info("Found openfero/job-disabled label in job-configmap " + configMap.Name)
 		return
 	}
 
@@ -215,7 +221,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	if job_definition != "" {
 		yaml_job_definition = []byte(job_definition)
 	} else {
-		log.Error("Could not find a data block with %s the name in the configmap.", alertname)
+		log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
 		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 		return
 	}
@@ -224,7 +230,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 	// convert the yaml to json so it works with Unmarshal
 	jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
 	if err != nil {
-		log.Error("error while converting YAML job definition to JSON: %v", err)
+		log.Error("error while converting YAML job definition to JSON: ", err)
 		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 		return
 	}
@@ -235,7 +241,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jobObject := &batchv1.Job{}
 		err = json.Unmarshal(jsonBytes, jobObject)
 		if err != nil {
-			log.Error("Error while using unmarshal on received job: %v", err)
+			log.Error("Error while using unmarshal on received job: ", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			return
 		}
@@ -243,7 +249,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		//Adding randomString to avoid name conflict
 		jobObject.SetName(jobObject.Name + "-" + randomstring)
 		//Adding Labels as Environment variables
-		log.Info("Adding Alert-Labels as environment variable to job %s", jobObject.Name)
+		log.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
 		for labelkey, labelvalue := range message.Alerts[alert].Labels {
 			jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
 		}
@@ -252,14 +258,14 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jobsClient := server.clientset.BatchV1().Jobs(server.job_destination_namespace)
 
 		// Create job
-		log.Info("Creating job %s", jobObject.Name)
+		log.Info("Creating job " + jobObject.Name)
 		_, err := jobsClient.Create(jobObject)
 		if err != nil {
-			log.Error("error creating job: %v", err)
+			log.Error("error creating job: ", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			return
 		}
-		log.Info("Created job %s", jobObject.Name)
+		log.Info("Created job " + jobObject.Name)
 	}
 }
 
@@ -272,10 +278,10 @@ func (server *clientsetStruct) cleanupJobs() {
 
 	for _, job := range jobs.Items {
 		if job.Status.Active > 0 {
-			log.Info("Job %v is running", job.Name)
+			log.Info("Job " + job.Name + " is running")
 		} else {
 			if job.Status.Succeeded > 0 {
-				log.Info("Job %v succeeded... going to cleanup", job.Name)
+				log.Info("Job " + job.Name + " succeeded... going to cleanup")
 				jobClient.Delete(job.Name, &deleteOptions)
 			}
 		}
