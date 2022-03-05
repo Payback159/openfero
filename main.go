@@ -204,7 +204,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		if err != nil {
 			log.Error(err)
 			http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", http.StatusInternalServerError)
-			return
+			break
 		}
 
 		job_definition := configMap.Data[alertname]
@@ -214,7 +214,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		} else {
 			log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
-			return
+			break
 		}
 		// yaml_job_definition contains a []byte of the yaml job spec
 		// convert the yaml to json so it works with Unmarshal
@@ -222,7 +222,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		if err != nil {
 			log.Error("error while converting YAML job definition to JSON: ", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
-			return
+			break
 		}
 		randomstring := StringWithCharset(5, charset)
 
@@ -231,7 +231,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		if err != nil {
 			log.Error("Error while using unmarshal on received job: ", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
-			return
+			break
 		}
 
 		//Adding randomString to avoid name conflict
@@ -251,7 +251,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		if err != nil {
 			log.Error("error creating job: ", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
-			return
+			break
 		}
 		log.Info("Created job " + jobObject.Name)
 	}
