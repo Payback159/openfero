@@ -207,7 +207,7 @@ func sanitize_input(input string) string {
 
 func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
 	for _, alert := range message.Alerts {
-		alertname := alert.Labels["alertname"]
+		alertname := sanitize_input(alert.Labels["alertname"])
 		responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
 		log.Info("Try to load configmap " + responses_configmap)
 		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
