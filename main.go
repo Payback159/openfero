@@ -167,75 +167,73 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 		return
 	}
 
-	status := strings.Replace(message.Status, "\n", "", -1)
-	status = strings.Replace(status, "\r", "", -1)
-
-	alertname := strings.Replace(message.CommonLabels["alertname"], "\n", "", -1)
-	alertname = strings.Replace(alertname, "\r", "", -1)
+	status := sanitize_input(message.Status)
 	alertcount := len(message.Alerts)
 
-	log.Info("Webhook received: " + alertname + "[" + status + "] with " + fmt.Sprint(alertcount) + " Alerts")
+	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
 	//Crafting log entry for alert labels
 	var ll *log.Entry
 	for labelkey, labelvalue := range message.CommonLabels {
+		labelkey = sanitize_input(labelkey)
+		labelvalue = sanitize_input(labelvalue)
 		ll = log.WithFields(log.Fields{labelkey: labelvalue})
 	}
-	ll.Info("Label logging for " + alertname)
+	ll.Info("Common Labels")
 
 	var al *log.Entry
 	for annotationkey, annotationvalue := range message.CommonAnnotations {
+		annotationkey = sanitize_input(annotationkey)
+		annotationvalue = sanitize_input(annotationvalue)
 		al = log.WithFields(log.Fields{annotationkey: annotationvalue})
 	}
-	al.Info("Annotations logging for " + alertname)
+	al.Info("Common Annotations")
 
 	if status == "resolved" || status == "firing" {
-		log.Info("Create ResponseJobs for " + alertname)
+		log.Info("Create ResponseJobs for")
 		server.createResponseJob(message, status, httpwriter)
 	} else {
-		log.Warn("Received alarm without correct response configuration, ommiting reponses.")
+		log.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
 		return
 	}
 
 }
 
+func sanitize_input(input string) string {
+	input = strings.Replace(input, "\n", "", -1)
+	input = strings.Replace(input, "\r", "", -1)
+	return input
+}
+
 func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
+	for _, alert := range message.Alerts {
+		alertname := alert.Labels["alertname"]
+		responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
+		log.Info("Try to load configmap " + responses_configmap)
+		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
+		if err != nil {
+			log.Error(err)
+			http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", http.StatusInternalServerError)
+			return
+		}
 
-	alertname := message.CommonLabels["alertname"]
-	responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
-	log.Info("Try to load configmap " + responses_configmap)
-	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
-	if err != nil {
-		log.Error("error while retrieving the configMap: "+responses_configmap, err)
-		http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", http.StatusInternalServerError)
-		return
-	}
-
-	if configMap.Labels["openfero/job-disabled"] != "" {
-		log.Info("Found openfero/job-disabled label in job-configmap " + configMap.Name)
-		return
-	}
-
-	job_definition := configMap.Data[alertname]
-	var yaml_job_definition []byte
-	if job_definition != "" {
-		yaml_job_definition = []byte(job_definition)
-	} else {
-		log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
-		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
-		return
-	}
-
-	// yaml_job_definition contains a []byte of the yaml job spec
-	// convert the yaml to json so it works with Unmarshal
-	jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
-	if err != nil {
-		log.Error("error while converting YAML job definition to JSON: ", err)
-		http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
-		return
-	}
-
-	for alert := range message.Alerts {
+		job_definition := configMap.Data[alertname]
+		var yaml_job_definition []byte
+		if job_definition != "" {
+			yaml_job_definition = []byte(job_definition)
+		} else {
+			log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
+			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
+			return
+		}
+		// yaml_job_definition contains a []byte of the yaml job spec
+		// convert the yaml to json so it works with Unmarshal
+		jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
+		if err != nil {
+			log.Error("error while converting YAML job definition to JSON: ", err)
+			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
+			return
+		}
 		randomstring := StringWithCharset(5, charset)
 
 		jobObject := &batchv1.Job{}
@@ -250,7 +248,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jobObject.SetName(jobObject.Name + "-" + randomstring)
 		//Adding Labels as Environment variables
 		log.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
-		for labelkey, labelvalue := range message.Alerts[alert].Labels {
+		for labelkey, labelvalue := range alert.Labels {
 			jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
 		}
 
@@ -259,7 +257,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 
 		// Create job
 		log.Info("Creating job " + jobObject.Name)
-		_, err := jobsClient.Create(jobObject)
+		_, err = jobsClient.Create(jobObject)
 		if err != nil {
 			log.Error("error creating job: ", err)
 			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
