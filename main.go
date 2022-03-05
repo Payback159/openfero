@@ -172,22 +172,26 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
-	//Crafting log entry for alert labels
-	var ll *log.Entry
-	for labelkey, labelvalue := range message.CommonLabels {
-		labelkey = sanitize_input(labelkey)
-		labelvalue = sanitize_input(labelvalue)
-		ll = log.WithFields(log.Fields{labelkey: labelvalue})
+	//Crafting log entry for common alert labels
+	if len(message.CommonAnnotations) > 0 {
+		var ll *log.Entry
+		for labelkey, labelvalue := range message.CommonLabels {
+			labelkey = sanitize_input(labelkey)
+			labelvalue = sanitize_input(labelvalue)
+			ll = log.WithFields(log.Fields{labelkey: labelvalue})
+		}
+		ll.Info("Common Labels")
 	}
-	ll.Info("Common Labels")
-
-	var al *log.Entry
-	for annotationkey, annotationvalue := range message.CommonAnnotations {
-		annotationkey = sanitize_input(annotationkey)
-		annotationvalue = sanitize_input(annotationvalue)
-		al = log.WithFields(log.Fields{annotationkey: annotationvalue})
+	//Crafting log entry for common alert annotations
+	if len(message.CommonAnnotations) > 0 {
+		var al *log.Entry
+		for annotationkey, annotationvalue := range message.CommonAnnotations {
+			annotationkey = sanitize_input(annotationkey)
+			annotationvalue = sanitize_input(annotationvalue)
+			al = log.WithFields(log.Fields{annotationkey: annotationvalue})
+		}
+		al.Info("Common Annotations")
 	}
-	al.Info("Common Annotations")
 
 	if status == "resolved" || status == "firing" {
 		log.Info("Create ResponseJobs for")
