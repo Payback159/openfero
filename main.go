@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -103,8 +102,8 @@ func main() {
 	cleanupjob.SingletonMode()
 	scheduler.StartAsync()
 
-	http.HandleFunc("/healthz", healthzHandler)
-	http.HandleFunc("/readiness", readinessHandler)
+	http.HandleFunc("/healthz", server.healthzHandler)
+	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
@@ -120,14 +119,22 @@ func StringWithCharset(length int, charset string) string {
 }
 
 //handling healthness probe
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, "ok\n")
+func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	log.Info("Health request answered")
 }
 
 //handling readiness probe
-func readinessHandler(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, "ok\n")
+func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).List(metav1.ListOptions{})
+	if err != nil {
+		log.Error(err)
+		http.Error(w, "ConfigMaps could not be listed. Does the ServiceAccount of OpenFero also have the necessary permissions?", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	log.Info("Readiness request answered")
 }
 
@@ -138,7 +145,7 @@ func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Requ
 	case http.MethodPost:
 		server.postHandler(w, r)
 	default:
-		http.Error(w, "unsupported HTTP method", 400)
+		http.Error(w, "unsupported HTTP method", http.StatusBadRequest)
 	}
 }
 
@@ -163,7 +170,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 	var message HookMessage
 	if err := dec.Decode(&message); err != nil {
 		log.Error("error decoding message: ", err)
-		http.Error(httpwriter, "invalid request body", 400)
+		http.Error(httpwriter, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -172,29 +179,8 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
-	//Crafting log entry for common alert labels
-	if len(message.CommonAnnotations) > 0 {
-		var ll *log.Entry
-		for labelkey, labelvalue := range message.CommonLabels {
-			labelkey = sanitize_input(labelkey)
-			labelvalue = sanitize_input(labelvalue)
-			ll = log.WithFields(log.Fields{labelkey: labelvalue})
-		}
-		ll.Info("Common Labels")
-	}
-	//Crafting log entry for common alert annotations
-	if len(message.CommonAnnotations) > 0 {
-		var al *log.Entry
-		for annotationkey, annotationvalue := range message.CommonAnnotations {
-			annotationkey = sanitize_input(annotationkey)
-			annotationvalue = sanitize_input(annotationvalue)
-			al = log.WithFields(log.Fields{annotationkey: annotationvalue})
-		}
-		al.Info("Common Annotations")
-	}
-
 	if status == "resolved" || status == "firing" {
-		log.Info("Create ResponseJobs for")
+		log.Info("Create ResponseJobs")
 		server.createResponseJob(message, status, httpwriter)
 	} else {
 		log.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
@@ -283,7 +269,7 @@ func (server *clientsetStruct) cleanupJobs() {
 			log.Info("Job " + job.Name + " is running")
 		} else {
 			if job.Status.Succeeded > 0 {
-				log.Info("Job " + job.Name + " succeeded... going to cleanup")
+				log.Info("Job " + job.Name + " succeeded - going to cleanup")
 				jobClient.Delete(job.Name, &deleteOptions)
 			}
 		}
