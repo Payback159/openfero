@@ -8,6 +8,7 @@ name: build-and-publish-pre-release
 on:
   push:
     paths:
+     - 'Dockerfile'
      - 'go.mod'
      - 'go.sum'
      - '*.go'
