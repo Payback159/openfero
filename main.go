@@ -203,7 +203,6 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
 		if err != nil {
 			log.Error(err)
-			http.Error(httpwriter, "Webhook error retrieving configMap with job definitions", http.StatusInternalServerError)
 			continue
 		}
 
@@ -213,7 +212,6 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 			yaml_job_definition = []byte(job_definition)
 		} else {
 			log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
-			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			continue
 		}
 		// yaml_job_definition contains a []byte of the yaml job spec
@@ -221,7 +219,6 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
 		if err != nil {
 			log.Error("error while converting YAML job definition to JSON: ", err)
-			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			continue
 		}
 		randomstring := StringWithCharset(5, charset)
@@ -230,7 +227,6 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		err = json.Unmarshal(jsonBytes, jobObject)
 		if err != nil {
 			log.Error("Error while using unmarshal on received job: ", err)
-			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			continue
 		}
 
@@ -250,7 +246,6 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		_, err = jobsClient.Create(jobObject)
 		if err != nil {
 			log.Error("error creating job: ", err)
-			http.Error(httpwriter, "Webhook error creating a job", http.StatusInternalServerError)
 			continue
 		}
 		log.Info("Created job " + jobObject.Name)
