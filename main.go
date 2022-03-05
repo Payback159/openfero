@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -127,7 +128,7 @@ func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Req
 
 //handling readiness probe
 func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).List(metav1.ListOptions{})
+	_, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Error(err)
 		http.Error(w, "ConfigMaps could not be listed. Does the ServiceAccount of OpenFero also have the necessary permissions?", http.StatusInternalServerError)
@@ -200,7 +201,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		alertname := sanitize_input(alert.Labels["alertname"])
 		responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
 		log.Info("Try to load configmap " + responses_configmap)
-		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(responses_configmap, metav1.GetOptions{})
+		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(context.TODO(), responses_configmap, metav1.GetOptions{})
 		if err != nil {
 			log.Error(err)
 			continue
@@ -243,7 +244,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 
 		// Create job
 		log.Info("Creating job " + jobObject.Name)
-		_, err = jobsClient.Create(jobObject)
+		_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
 		if err != nil {
 			log.Error("error creating job: ", err)
 			continue
@@ -257,7 +258,7 @@ func (server *clientsetStruct) cleanupJobs() {
 	deletepropagationpolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{PropagationPolicy: &deletepropagationpolicy}
 
-	jobs, _ := jobClient.List(metav1.ListOptions{})
+	jobs, _ := jobClient.List(context.TODO(), metav1.ListOptions{})
 
 	for _, job := range jobs.Items {
 		if job.Status.Active > 0 {
@@ -265,7 +266,7 @@ func (server *clientsetStruct) cleanupJobs() {
 		} else {
 			if job.Status.Succeeded > 0 {
 				log.Info("Job " + job.Name + " succeeded - going to cleanup")
-				jobClient.Delete(job.Name, &deleteOptions)
+				jobClient.Delete(context.TODO(), job.Name, deleteOptions)
 			}
 		}
 	}
