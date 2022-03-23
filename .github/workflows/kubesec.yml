@@ -8,6 +8,8 @@ name: Kubesec
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'k8s-deployment/*.yaml'
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ main ]
