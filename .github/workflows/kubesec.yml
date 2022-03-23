@@ -13,6 +13,8 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ main ]
+    paths:
+      - 'k8s-deployment/*.yaml'
   schedule:
     - cron: '34 17 * * 3'
 
