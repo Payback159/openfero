@@ -6,6 +6,7 @@ name: build-and-publish-pre-release
 # documentation.
 
 on:
+  workflow_dispatch:
   push:
     paths:
      - 'Dockerfile'
