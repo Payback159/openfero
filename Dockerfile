@@ -1,6 +1,5 @@
 # build stage
-ARG GO_VERS=1.17.8
-FROM golang:${GO_VERS}-alpine AS build-env
+FROM golang@sha256:725f8fd50191209a4c4a00def1d93c4193c4d0a1c2900139daf8f742480f3367 AS build-env
 
 ADD certs/ /usr/local/share/ca-certificates/
 RUN update-ca-certificates
