@@ -108,7 +108,7 @@ func main() {
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
-	http.HandleFunc("/alert-store", server.getAlerts)
+	http.HandleFunc("/alert-store", server.alertStoreHandler)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
@@ -288,7 +288,7 @@ func (server *clientsetStruct) saveAlert(alert Alert) {
 }
 
 // function which provides alerts array to the getHandler
-func (server *clientsetStruct) getAlerts(w http.ResponseWriter, r *http.Request) {
+func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(alerts)
 }
