@@ -52,6 +52,8 @@ type (
 	}
 )
 
+var alerts []Alert
+
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 var seededRand *rand.Rand = rand.New(
@@ -66,12 +68,12 @@ func main() {
 	// Extract the current namespace from the mounted secrets
 	default_k8s_namespace_location := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	if _, err := os.Stat(default_k8s_namespace_location); os.IsNotExist(err) {
-		log.Panic("Current kubernetes namespace could not be found", err.Error())
+		log.Fatal("Current kubernetes namespace could not be found", err.Error())
 	}
 
 	namespace_dat, err := ioutil.ReadFile(default_k8s_namespace_location)
 	if err != nil {
-		log.Panic("Couldn't read from "+default_k8s_namespace_location, err.Error())
+		log.Fatal("Couldn't read from "+default_k8s_namespace_location, err.Error())
 	}
 
 	current_namespace := string(namespace_dat)
@@ -106,6 +108,7 @@ func main() {
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
+	http.HandleFunc("/alert-store", server.getAlerts)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
@@ -119,14 +122,14 @@ func StringWithCharset(length int, charset string) string {
 	return string(randombytes)
 }
 
-//handling healthness probe
+// handling healthness probe
 func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	log.Info("Health request answered")
 }
 
-//handling readiness probe
+// handling readiness probe
 func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -150,7 +153,7 @@ func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-//Handling get requests to listen received alerts
+// Handling get requests to listen received alerts
 func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 	//Alertmanager expects an 200 OK response, otherwise send_resolved will never work
 	enc := json.NewEncoder(httpwriter)
@@ -162,7 +165,7 @@ func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httpre
 	}
 }
 
-//Handling the Alertmanager Post-Requests
+// Handling the Alertmanager Post-Requests
 func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 
 	dec := json.NewDecoder(httprequest.Body)
@@ -182,7 +185,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	if status == "resolved" || status == "firing" {
 		log.Info("Create ResponseJobs")
-		server.createResponseJob(message, status, httpwriter)
+		go server.createResponseJob(message, status, httpwriter)
 	} else {
 		log.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
 		return
@@ -198,6 +201,7 @@ func sanitize_input(input string) string {
 
 func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
 	for _, alert := range message.Alerts {
+		server.saveAlert(alert)
 		alertname := sanitize_input(alert.Labels["alertname"])
 		responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
 		log.Info("Try to load configmap " + responses_configmap)
@@ -271,4 +275,20 @@ func (server *clientsetStruct) cleanupJobs() {
 		}
 	}
 
+}
+
+// function which gets an alert from createResponseJob and saves it to the alerts array
+// drops the oldest alert if the array is full
+func (server *clientsetStruct) saveAlert(alert Alert) {
+	alerts_array_size := 10
+	if len(alerts) >= alerts_array_size {
+		alerts = alerts[1:]
+	}
+	alerts = append(alerts, alert)
+}
+
+// function which provides alerts array to the getHandler
+func (server *clientsetStruct) getAlerts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(alerts)
 }
