@@ -46,9 +46,9 @@ type (
 	}
 
 	clientsetStruct struct {
-		clientset                 kubernetes.Clientset
-		job_destination_namespace string
-		configmap_namespace       string
+		clientset               kubernetes.Clientset
+		jobDestinationNamespace string
+		configmapNamespace      string
 	}
 )
 
@@ -66,20 +66,20 @@ func main() {
 	log.Info("Starting webhook receiver")
 
 	// Extract the current namespace from the mounted secrets
-	default_k8s_namespace_location := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	if _, err := os.Stat(default_k8s_namespace_location); os.IsNotExist(err) {
+	defaultK8sNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	if _, err := os.Stat(defaultK8sNamespaceLocation); os.IsNotExist(err) {
 		log.Fatal("Current kubernetes namespace could not be found", err.Error())
 	}
 
-	namespace_dat, err := ioutil.ReadFile(default_k8s_namespace_location)
+	namespaceDat, err := ioutil.ReadFile(defaultK8sNamespaceLocation)
 	if err != nil {
-		log.Fatal("Couldn't read from "+default_k8s_namespace_location, err.Error())
+		log.Fatal("Couldn't read from "+defaultK8sNamespaceLocation, err.Error())
 	}
 
-	current_namespace := string(namespace_dat)
+	currentNamespace := string(namespaceDat)
 
-	configmap_namespace := flag.String("configmap_namespace", current_namespace, "Kubernetes namespace where jobs are defined")
-	job_destination_namespace := flag.String("job_destination_namespace", current_namespace, "Kubernetes namespace where jobs will be created")
+	configmapNamespace := flag.String("configmapNamespace", currentNamespace, "Kubernetes namespace where jobs are defined")
+	jobDestinationNamespace := flag.String("jobDestinationNamespace", currentNamespace, "Kubernetes namespace where jobs will be created")
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -92,9 +92,9 @@ func main() {
 	}
 
 	server := &clientsetStruct{
-		clientset:                 *clientset,
-		job_destination_namespace: *job_destination_namespace,
-		configmap_namespace:       *configmap_namespace,
+		clientset:               *clientset,
+		jobDestinationNamespace: *jobDestinationNamespace,
+		configmapNamespace:      *configmapNamespace,
 	}
 
 	addr := flag.String("addr", ":8080", "address to listen for webhook")
@@ -131,7 +131,7 @@ func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Req
 
 // handling readiness probe
 func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).List(context.TODO(), metav1.ListOptions{})
+	_, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Error(err)
 		http.Error(w, "ConfigMaps could not be listed. Does the ServiceAccount of OpenFero also have the necessary permissions?", http.StatusInternalServerError)
@@ -178,7 +178,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 		return
 	}
 
-	status := sanitize_input(message.Status)
+	status := sanitizeInput(message.Status)
 	alertcount := len(message.Alerts)
 
 	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
@@ -193,7 +193,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 }
 
-func sanitize_input(input string) string {
+func sanitizeInput(input string) string {
 	input = strings.Replace(input, "\n", "", -1)
 	input = strings.Replace(input, "\r", "", -1)
 	return input
@@ -202,26 +202,26 @@ func sanitize_input(input string) string {
 func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
 	for _, alert := range message.Alerts {
 		server.saveAlert(alert)
-		alertname := sanitize_input(alert.Labels["alertname"])
-		responses_configmap := strings.ToLower("openfero-" + alertname + "-" + status)
-		log.Info("Try to load configmap " + responses_configmap)
-		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmap_namespace).Get(context.TODO(), responses_configmap, metav1.GetOptions{})
+		alertname := sanitizeInput(alert.Labels["alertname"])
+		responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
+		log.Info("Try to load configmap " + responsesConfigmap)
+		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
 		if err != nil {
 			log.Error(err)
 			continue
 		}
 
-		job_definition := configMap.Data[alertname]
-		var yaml_job_definition []byte
-		if job_definition != "" {
-			yaml_job_definition = []byte(job_definition)
+		jobDefinition := configMap.Data[alertname]
+		var yamlJobDefinition []byte
+		if jobDefinition != "" {
+			yamlJobDefinition = []byte(jobDefinition)
 		} else {
 			log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
 			continue
 		}
-		// yaml_job_definition contains a []byte of the yaml job spec
+		// yamlJobDefinition contains a []byte of the yaml job spec
 		// convert the yaml to json so it works with Unmarshal
-		jsonBytes, err := yaml.YAMLToJSON(yaml_job_definition)
+		jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
 		if err != nil {
 			log.Error("error while converting YAML job definition to JSON: ", err)
 			continue
@@ -244,7 +244,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 		}
 
 		// Job client for creating the job according to the job definitions extracted from the responses configMap
-		jobsClient := server.clientset.BatchV1().Jobs(server.job_destination_namespace)
+		jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
 
 		// Create job
 		log.Info("Creating job " + jobObject.Name)
@@ -258,7 +258,7 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 }
 
 func (server *clientsetStruct) cleanupJobs() {
-	jobClient := server.clientset.BatchV1().Jobs(server.job_destination_namespace)
+	jobClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
 	deletepropagationpolicy := metav1.DeletePropagationBackground
 	deleteOptions := metav1.DeleteOptions{PropagationPolicy: &deletepropagationpolicy}
 
@@ -280,8 +280,8 @@ func (server *clientsetStruct) cleanupJobs() {
 // function which gets an alert from createResponseJob and saves it to the alerts array
 // drops the oldest alert if the array is full
 func (server *clientsetStruct) saveAlert(alert Alert) {
-	alerts_array_size := 10
-	if len(alerts) >= alerts_array_size {
+	alertsArraySize := 10
+	if len(alerts) >= alertsArraySize {
 		alerts = alerts[1:]
 	}
 	alerts = append(alerts, alert)
