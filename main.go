@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -66,14 +65,14 @@ func main() {
 	log.Info("Starting webhook receiver")
 
 	// Extract the current namespace from the mounted secrets
-	defaultK8sNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	if _, err := os.Stat(defaultK8sNamespaceLocation); os.IsNotExist(err) {
+	defaultNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
 		log.Fatal("Current kubernetes namespace could not be found", err.Error())
 	}
 
-	namespaceDat, err := ioutil.ReadFile(defaultK8sNamespaceLocation)
+	namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
 	if err != nil {
-		log.Fatal("Couldn't read from "+defaultK8sNamespaceLocation, err.Error())
+		log.Fatal("Couldn't read from "+defaultNamespaceLocation, err.Error())
 	}
 
 	currentNamespace := string(namespaceDat)
