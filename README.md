@@ -2,7 +2,7 @@
 
 Open Fero is a little play on words from the Latin "opem fero", which means "to help" and the term "OpenSource". Hence the name "openfero". The scope of OpenFero is a framework for self-healing in a cloud-native environment.
 
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Payback159/openfero/badge)](https://api.securityscorecards.dev/projects/github.com/Payback159/openfero)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Payback159/openfero/badge)](https://api.securityscorecards.dev/projects/github.com/Payback159/openfero) [![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/6683/badge)](https://bestpractices.coreinfrastructure.org/projects/6683)
 
 ## Local development
 
