@@ -1,4 +1,4 @@
-
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -17,15 +17,15 @@ metadata:
     name: "openfero"
   namespace: default
 rules:
-- resources:
-  - jobs
-  apiGroups:
-  - batch
-  verbs:
-  - create
-  - get
-  - list
-  - delete
+  - resources:
+    - jobs
+    apiGroups:
+    - batch
+    verbs:
+    - create
+    - get
+    - list
+    - delete
 
 ---
 
@@ -41,6 +41,6 @@ roleRef:
   kind: Role
   name: openfero-create-jobs
 subjects:
-- kind: ServiceAccount
-  name: openfero
-  namespace: default
+  - kind: ServiceAccount
+    name: openfero
+    namespace: default
