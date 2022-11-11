@@ -4,4 +4,6 @@ Since remediation often needs to be close to the system that needs the remediati
 
 ## Recommendation-1
 
-[<img src="./openfero-installation-recommendation-1.png">]()
+![Shows 3 kubernetes namespaces monitoring, namespaceA, namespaceB. In monitoring runs prometheus and alertmanager. Alertmanager notifies the OpenFero instances in namespaceA and namespaceB.][recommendation-1]
+
+[recommendation-1]: openfero-installation-recommendation-1.png

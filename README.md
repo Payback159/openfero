@@ -29,7 +29,7 @@ curl -X POST -H "Content-Type: application/json" -d @./test/alerts.json http://l
 
 ## Component-Diagram
 
-[<img src="./docs/component-diagram.png">]()
+![Shows the Prometheus, Alertmanager components and that Alertmanager notifies the OpenFero component so that OpenFero starts the jobs via Kubernetes API.][comp-dia]
 
 ## Job definitions
 
@@ -75,3 +75,6 @@ spec:
 The service account that is installed when deploying openfero is for openfero itself. For the jobs, separate service accounts must be rolled out, which have the appropriate permissions for the job.
 
 For jobs that need to interact with the Kubernetes API, it is recommended to define a suitable role for the job and authorize it via ServiceAccount in the job definition.
+
+
+[comp-dia]: ./docs/component-diagram.png
