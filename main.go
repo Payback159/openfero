@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math/rand"
+	"crypto/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -266,8 +266,7 @@ func (server *clientsetStruct) cleanupJobs() {
 	for _, job := range jobs.Items {
 		if job.Status.Active > 0 {
 			log.Info("Job " + job.Name + " is running")
-		} else {
-			if job.Status.Succeeded > 0 {
+		} else if job.Status.Succeeded > 0 {
 				log.Info("Job " + job.Name + " succeeded - going to cleanup")
 				jobClient.Delete(context.TODO(), job.Name, deleteOptions)
 			}
