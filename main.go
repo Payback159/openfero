@@ -60,7 +60,7 @@ var seededRand *rand.Rand = rand.New(
 )
 
 func main() {
-	//activate json logging
+	// activate json logging
 	log.SetFormatter(&log.JSONFormatter{})
 	log.Info("Starting webhook receiver")
 
@@ -154,7 +154,7 @@ func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Requ
 
 // Handling get requests to listen received alerts
 func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
-	//Alertmanager expects an 200 OK response, otherwise send_resolved will never work
+	// Alertmanager expects an 200 OK response, otherwise send_resolved will never work
 	enc := json.NewEncoder(httpwriter)
 	httpwriter.Header().Set("Content-Type", "application/json")
 	httpwriter.WriteHeader(http.StatusOK)
@@ -234,9 +234,9 @@ func (server *clientsetStruct) createResponseJob(message HookMessage, status str
 			continue
 		}
 
-		//Adding randomString to avoid name conflict
+		// Adding randomString to avoid name conflict
 		jobObject.SetName(jobObject.Name + "-" + randomstring)
-		//Adding Labels as Environment variables
+		// Adding Labels as Environment variables
 		log.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
 		for labelkey, labelvalue := range alert.Labels {
 			jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
