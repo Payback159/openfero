@@ -266,14 +266,11 @@ func (server *clientsetStruct) cleanupJobs() {
 	for _, job := range jobs.Items {
 		if job.Status.Active > 0 {
 			log.Info("Job " + job.Name + " is running")
-		} else {
-			if job.Status.Succeeded > 0 {
-				log.Info("Job " + job.Name + " succeeded - going to cleanup")
-				jobClient.Delete(context.TODO(), job.Name, deleteOptions)
-			}
+		} else if job.Status.Succeeded > 0 {
+			log.Info("Job " + job.Name + " succeeded - going to cleanup")
+			jobClient.Delete(context.TODO(), job.Name, deleteOptions)
 		}
 	}
-
 }
 
 // function which gets an alert from createResponseJob and saves it to the alerts array
