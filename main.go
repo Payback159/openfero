@@ -193,8 +193,8 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 }
 
 func sanitizeInput(input string) string {
-	input = strings.Replace(input, "\n", "", -1)
-	input = strings.Replace(input, "\r", "", -1)
+	input = strings.ReplaceAll(input, "\n", "")
+	input = strings.ReplaceAll(input, "\r", "")
 	return input
 }
 
