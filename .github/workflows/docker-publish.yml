@@ -110,7 +110,7 @@ jobs:
       #  run: cosign sign ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
 
       - name: Create PreRelease
-        uses: ncipollo/release-action@d9356040b0dc694f6d006b6cabee4d3c024f9e72 # v1
+        uses: ncipollo/release-action@18eadf9c9b0f226f47f164f5373c6a44f0aae169 # v1
         if: "!startsWith(github.event.ref, 'refs/tags/v')"
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -122,7 +122,7 @@ jobs:
           generateReleaseNotes: true
 
       - name: Create tagged release
-        uses: ncipollo/release-action@d9356040b0dc694f6d006b6cabee4d3c024f9e72 # v1
+        uses: ncipollo/release-action@18eadf9c9b0f226f47f164f5373c6a44f0aae169 # v1
         if: "startsWith(github.event.ref, 'refs/tags/v')"
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
