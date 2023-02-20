@@ -7,8 +7,8 @@ Open Fero is a little play on words from the Latin "opem fero", which means "to 
 ## Local development
 
 ```bash
-export KUBE_VERSION=v1.17.17
-export PROM_OPERATOR_VERSION=13.2.1
+export KUBE_VERSION=v1.26.0
+export PROM_OPERATOR_VERSION=45.2.0
 
 brew install kind
 kind create cluster --image kindest/node:${KUBE_VERSION}
