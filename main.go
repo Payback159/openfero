@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -55,10 +56,6 @@ type (
 var alerts []Alert
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-
-var seededRand *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()),
-)
 
 func main() {
 	// activate json logging
@@ -112,11 +109,16 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
+// Use crypto/rand to generate a random string of a given length and charset
 func StringWithCharset(length int, charset string) string {
+	num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+	if err != nil {
+		log.Error(err)
+	}
 
 	randombytes := make([]byte, length)
 	for i := range randombytes {
-		randombytes[i] = charset[seededRand.Intn(len(charset))]
+		randombytes[i] = charset[num.Int64()]
 	}
 
 	return string(randombytes)
