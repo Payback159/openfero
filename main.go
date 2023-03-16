@@ -206,6 +206,7 @@ func sanitizeInput(input string) string {
 }
 
 func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, alert Alert, status string, httpwriter http.ResponseWriter) {
+	defer waitgroup.Done()
 	server.saveAlert(alert)
 	alertname := sanitizeInput(alert.Labels["alertname"])
 	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
