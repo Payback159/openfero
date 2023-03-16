@@ -111,13 +111,12 @@ func main() {
 
 // Use crypto/rand to generate a random string of a given length and charset
 func StringWithCharset(length int, charset string) string {
-	num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-	if err != nil {
-		log.Error(err)
-	}
-
 	randombytes := make([]byte, length)
 	for i := range randombytes {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			log.Error(err)
+		}
 		randombytes[i] = charset[num.Int64()]
 	}
 
