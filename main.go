@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -54,10 +56,6 @@ type (
 var alerts []Alert
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-
-var seededRand *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()),
-)
 
 func main() {
 	// activate json logging
@@ -111,11 +109,16 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
+// Use crypto/rand to generate a random string of a given length and charset
 func StringWithCharset(length int, charset string) string {
+	num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+	if err != nil {
+		log.Error(err)
+	}
 
 	randombytes := make([]byte, length)
 	for i := range randombytes {
-		randombytes[i] = charset[seededRand.Intn(len(charset))]
+		randombytes[i] = charset[num.Int64()]
 	}
 
 	return string(randombytes)
@@ -179,12 +182,17 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	status := sanitizeInput(message.Status)
 	alertcount := len(message.Alerts)
+	var waitgroup sync.WaitGroup
+	waitgroup.Add(alertcount)
 
 	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
 	if status == "resolved" || status == "firing" {
 		log.Info("Create ResponseJobs")
-		go server.createResponseJob(message, status, httpwriter)
+		for _, alert := range message.Alerts {
+			go server.createResponseJob(&waitgroup, alert, status, httpwriter)
+		}
+		waitgroup.Wait()
 	} else {
 		log.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
 		return
@@ -198,62 +206,55 @@ func sanitizeInput(input string) string {
 	return input
 }
 
-func (server *clientsetStruct) createResponseJob(message HookMessage, status string, httpwriter http.ResponseWriter) {
-	for _, alert := range message.Alerts {
-		server.saveAlert(alert)
-		alertname := sanitizeInput(alert.Labels["alertname"])
-		responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
-		log.Info("Try to load configmap " + responsesConfigmap)
-		configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-
-		jobDefinition := configMap.Data[alertname]
-		var yamlJobDefinition []byte
-		if jobDefinition != "" {
-			yamlJobDefinition = []byte(jobDefinition)
-		} else {
-			log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
-			continue
-		}
-		// yamlJobDefinition contains a []byte of the yaml job spec
-		// convert the yaml to json so it works with Unmarshal
-		jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
-		if err != nil {
-			log.Error("error while converting YAML job definition to JSON: ", err)
-			continue
-		}
-		randomstring := StringWithCharset(5, charset)
-
-		jobObject := &batchv1.Job{}
-		err = json.Unmarshal(jsonBytes, jobObject)
-		if err != nil {
-			log.Error("Error while using unmarshal on received job: ", err)
-			continue
-		}
-
-		// Adding randomString to avoid name conflict
-		jobObject.SetName(jobObject.Name + "-" + randomstring)
-		// Adding Labels as Environment variables
-		log.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
-		for labelkey, labelvalue := range alert.Labels {
-			jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
-		}
-
-		// Job client for creating the job according to the job definitions extracted from the responses configMap
-		jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
-
-		// Create job
-		log.Info("Creating job " + jobObject.Name)
-		_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
-		if err != nil {
-			log.Error("error creating job: ", err)
-			continue
-		}
-		log.Info("Created job " + jobObject.Name)
+func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, alert Alert, status string, httpwriter http.ResponseWriter) {
+	server.saveAlert(alert)
+	alertname := sanitizeInput(alert.Labels["alertname"])
+	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
+	log.Info("Try to load configmap " + responsesConfigmap)
+	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
+	if err != nil {
+		log.Error(err)
 	}
+
+	jobDefinition := configMap.Data[alertname]
+	var yamlJobDefinition []byte
+	if jobDefinition != "" {
+		yamlJobDefinition = []byte(jobDefinition)
+	} else {
+		log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
+	}
+	// yamlJobDefinition contains a []byte of the yaml job spec
+	// convert the yaml to json so it works with Unmarshal
+	jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
+	if err != nil {
+		log.Error("error while converting YAML job definition to JSON: ", err)
+	}
+	randomstring := StringWithCharset(5, charset)
+
+	jobObject := &batchv1.Job{}
+	err = json.Unmarshal(jsonBytes, jobObject)
+	if err != nil {
+		log.Error("Error while using unmarshal on received job: ", err)
+	}
+
+	// Adding randomString to avoid name conflict
+	jobObject.SetName(jobObject.Name + "-" + randomstring)
+	// Adding Labels as Environment variables
+	log.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
+	for labelkey, labelvalue := range alert.Labels {
+		jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
+	}
+
+	// Job client for creating the job according to the job definitions extracted from the responses configMap
+	jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
+
+	// Create job
+	log.Info("Creating job " + jobObject.Name)
+	_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
+	if err != nil {
+		log.Error("error creating job: ", err)
+	}
+	log.Info("Created job " + jobObject.Name)
 }
 
 func (server *clientsetStruct) cleanupJobs() {
