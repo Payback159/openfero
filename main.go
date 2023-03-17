@@ -106,6 +106,7 @@ func main() {
 	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
 	http.HandleFunc("/alert-store", server.alertStoreHandler)
+
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
@@ -222,6 +223,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 		yamlJobDefinition = []byte(jobDefinition)
 	} else {
 		log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
+		return
 	}
 	// yamlJobDefinition contains a []byte of the yaml job spec
 	// convert the yaml to json so it works with Unmarshal
