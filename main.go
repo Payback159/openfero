@@ -215,6 +215,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
 	if err != nil {
 		log.Error(err)
+		return
 	}
 
 	jobDefinition := configMap.Data[alertname]
@@ -230,6 +231,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
 	if err != nil {
 		log.Error("error while converting YAML job definition to JSON: ", err)
+		return
 	}
 	randomstring := StringWithCharset(5, charset)
 
@@ -237,6 +239,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	err = json.Unmarshal(jsonBytes, jobObject)
 	if err != nil {
 		log.Error("Error while using unmarshal on received job: ", err)
+		return
 	}
 
 	// Adding randomString to avoid name conflict
@@ -255,6 +258,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
 	if err != nil {
 		log.Error("error creating job: ", err)
+		return
 	}
 	log.Info("Created job " + jobObject.Name)
 }
