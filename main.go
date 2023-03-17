@@ -128,7 +128,6 @@ func StringWithCharset(length int, charset string) string {
 func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	log.Info("Health request answered")
 }
 
 // handling readiness probe
@@ -141,7 +140,6 @@ func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	log.Info("Readiness request answered")
 }
 
 func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Request) {
