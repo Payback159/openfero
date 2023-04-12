@@ -1,6 +1,6 @@
 # build stage
 # golang:1.20.2-bullseye
-FROM golang@sha256:51ff22f03320894402290ba7dfd83ee05b61e58b5381d76b40f2e3a370d81da3 AS build-env
+FROM golang@sha256:89924bd0abc1001141e0415648d90914ebc9a9d60d4cbbc696ee53f1d1a9a136 AS build-env
 
 COPY certs/ /usr/local/share/ca-certificates/
 RUN update-ca-certificates
