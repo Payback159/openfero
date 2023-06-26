@@ -13,9 +13,10 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 
 	"github.com/ghodss/yaml"
+
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +25,9 @@ import (
 
 	"github.com/go-co-op/gocron"
 )
+
+const CONTENTTYPE = "Content-Type"
+const APPLICATIONJSON = "application/json"
 
 type (
 	Timestamp   time.Time
@@ -54,23 +58,25 @@ type (
 )
 
 var alerts []Alert
+var log *zap.Logger
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 func main() {
 	// activate json logging
-	log.SetFormatter(&log.JSONFormatter{})
+	log, _ := zap.NewProduction()
+	defer log.Sync()
 	log.Info("Starting webhook receiver")
 
 	// Extract the current namespace from the mounted secrets
 	defaultNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
-		log.Fatal("Current kubernetes namespace could not be found", err.Error())
+		log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
 	}
 
 	namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
 	if err != nil {
-		log.Fatal("Couldn't read from "+defaultNamespaceLocation, err.Error())
+		log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
 	}
 
 	currentNamespace := string(namespaceDat)
@@ -107,7 +113,10 @@ func main() {
 	http.HandleFunc("/alerts", server.alertsHandler)
 	http.HandleFunc("/alert-store", server.alertStoreHandler)
 
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Info("Starting server on " + *addr)
+	if err := http.ListenAndServe(*addr, nil); err != nil {
+		log.Fatal("error starting server: ", zap.String("error", err.Error()))
+	}
 }
 
 // Use crypto/rand to generate a random string of a given length and charset
@@ -116,7 +125,7 @@ func StringWithCharset(length int, charset string) string {
 	for i := range randombytes {
 		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		if err != nil {
-			log.Error(err)
+			log.Error("error generating random string: ", zap.String("error", err.Error()))
 		}
 		randombytes[i] = charset[num.Int64()]
 	}
@@ -126,7 +135,7 @@ func StringWithCharset(length int, charset string) string {
 
 // handling healthness probe
 func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -134,11 +143,11 @@ func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Req
 func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Error(err)
+		log.Error("error listing ConfigMaps: ", zap.String("error", err.Error()))
 		http.Error(w, "ConfigMaps could not be listed. Does the ServiceAccount of OpenFero also have the necessary permissions?", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -157,11 +166,12 @@ func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Requ
 func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 	// Alertmanager expects an 200 OK response, otherwise send_resolved will never work
 	enc := json.NewEncoder(httpwriter)
-	httpwriter.Header().Set("Content-Type", "application/json")
+	httpwriter.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	httpwriter.WriteHeader(http.StatusOK)
 
 	if err := enc.Encode("OK"); err != nil {
-		log.Error("error encoding messages: ", err)
+		log.Error("error encoding messages: ", zap.String("error", err.Error()))
+		http.Error(httpwriter, "error encoding messages", http.StatusInternalServerError)
 	}
 }
 
@@ -173,7 +183,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 
 	var message HookMessage
 	if err := dec.Decode(&message); err != nil {
-		log.Error("error decoding message: ", err)
+		log.Error("error decoding message: ", zap.String("error", err.Error()))
 		http.Error(httpwriter, "invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -212,7 +222,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	log.Info("Try to load configmap " + responsesConfigmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
 	if err != nil {
-		log.Error(err)
+		log.Error("error getting configmap: ", zap.String("error", err.Error()))
 		return
 	}
 
@@ -228,7 +238,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	// convert the yaml to json so it works with Unmarshal
 	jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
 	if err != nil {
-		log.Error("error while converting YAML job definition to JSON: ", err)
+		log.Error("error while converting YAML job definition to JSON: ", zap.String("error", err.Error()))
 		return
 	}
 	randomstring := StringWithCharset(5, charset)
@@ -236,7 +246,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	jobObject := &batchv1.Job{}
 	err = json.Unmarshal(jsonBytes, jobObject)
 	if err != nil {
-		log.Error("Error while using unmarshal on received job: ", err)
+		log.Error("Error while using unmarshal on received job: ", zap.String("error", err.Error()))
 		return
 	}
 
@@ -255,7 +265,7 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	log.Info("Creating job " + jobObject.Name)
 	_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
 	if err != nil {
-		log.Error("error creating job: ", err)
+		log.Error("error creating job: ", zap.String("error", err.Error()))
 		return
 	}
 	log.Info("Created job " + jobObject.Name)
@@ -290,6 +300,6 @@ func (server *clientsetStruct) saveAlert(alert Alert) {
 
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	json.NewEncoder(w).Encode(alerts)
 }
