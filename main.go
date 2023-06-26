@@ -64,7 +64,7 @@ const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 func main() {
 	// activate json logging
-	log, _ := zap.NewProduction()
+	log, _ = zap.NewProduction()
 	defer log.Sync()
 	log.Info("Starting webhook receiver")
 
