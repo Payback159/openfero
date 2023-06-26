@@ -193,7 +193,7 @@ func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httpr
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(alertcount)
 
-	log.Info(fmt.Sprintf("Received %d alerts with status %s", alertcount, status))
+	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
 	if status == "resolved" || status == "firing" {
 		log.Info("Create ResponseJobs")
