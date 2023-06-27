@@ -22,8 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-
-	"github.com/go-co-op/gocron"
 )
 
 const CONTENTTYPE = "Content-Type"
@@ -102,11 +100,6 @@ func main() {
 
 	addr := flag.String("addr", ":8080", "address to listen for webhook")
 	flag.Parse()
-
-	scheduler := gocron.NewScheduler(time.UTC)
-	cleanupjob, _ := scheduler.Every("5m").Do(server.cleanupJobs)
-	cleanupjob.SingletonMode()
-	scheduler.StartAsync()
 
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
@@ -258,6 +251,11 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 		jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
 	}
 
+	// Adding TTL to job if it is not already set
+	if !checkJobTTL(jobObject) {
+		addJobTTL(jobObject)
+	}
+
 	// Job client for creating the job according to the job definitions extracted from the responses configMap
 	jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
 
@@ -271,21 +269,13 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	log.Info("Created job " + jobObject.Name)
 }
 
-func (server *clientsetStruct) cleanupJobs() {
-	jobClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
-	deletepropagationpolicy := metav1.DeletePropagationBackground
-	deleteOptions := metav1.DeleteOptions{PropagationPolicy: &deletepropagationpolicy}
+func checkJobTTL(jobObject *batchv1.Job) bool {
+	return jobObject.Spec.TTLSecondsAfterFinished != nil
+}
 
-	jobs, _ := jobClient.List(context.TODO(), metav1.ListOptions{})
-
-	for _, job := range jobs.Items {
-		if job.Status.Active > 0 {
-			log.Info("Job " + job.Name + " is running")
-		} else if job.Status.Succeeded > 0 {
-			log.Info("Job " + job.Name + " succeeded - going to cleanup")
-			jobClient.Delete(context.TODO(), job.Name, deleteOptions)
-		}
-	}
+func addJobTTL(jobObject *batchv1.Job) {
+	ttl := int32(300)
+	jobObject.Spec.TTLSecondsAfterFinished = &ttl
 }
 
 // function which gets an alert from createResponseJob and saves it to the alerts array
