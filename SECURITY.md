@@ -1,5 +1,3 @@
-# Security Policy
+# Reporting Security Issues
 
-## Reporting a Vulnerability
-
-If you find a security bug please report it privately to the maintainers listed in the MAINTAINERS.md
+To report a security issue, please use the GitHub Security Advisory ["Report a Vulnerability"]([https://github.com/electron/electron/security/advisories/new](https://github.com/Payback159/openfero/security/advisories/new)) tab.
