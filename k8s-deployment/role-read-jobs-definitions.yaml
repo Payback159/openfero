@@ -8,7 +8,7 @@ metadata:
   name: openfero-read-jobs-configmap
   labels:
     name: "openfero"
-    namespace: default
+    namespace: openfero
 rules:
   - resources:
     - configmaps
@@ -33,4 +33,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: openfero
-  namespace: default
+  namespace: openfero
