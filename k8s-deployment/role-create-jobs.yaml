@@ -15,7 +15,7 @@ metadata:
   name: openfero-create-jobs
   labels:
     name: "openfero"
-  namespace: default
+  namespace: openfero
 rules:
   - resources:
     - jobs
@@ -43,4 +43,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: openfero
-    namespace: default
+    namespace: openfero
