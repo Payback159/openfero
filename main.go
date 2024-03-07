@@ -59,7 +59,7 @@ type (
 	}
 )
 
-var alerts []Alert
+var alertStore []Alert
 var log *zap.Logger
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -96,9 +96,30 @@ func initKubeClient() *kubernetes.Clientset {
 }
 
 func main() {
-	// activate json logging
-	log, _ = zap.NewProduction()
-	defer log.Sync()
+
+	// Parse command line arguments
+	addr := flag.String("addr", ":8080", "address to listen for webhook")
+	logLevel := flag.String("logLevel", "info", "log level")
+	flag.Parse()
+
+	// Konfiguriere das Log-Level
+	var cfg zap.Config
+	switch strings.ToLower(*logLevel) {
+	case "debug":
+		cfg = zap.NewDevelopmentConfig()
+	case "info":
+		cfg = zap.NewProductionConfig()
+	default:
+		log.Fatal("Ungültiges Log-Level angegeben")
+	}
+
+	// Aktiviere das JSON-Logging
+	logger, err := cfg.Build()
+	if err != nil {
+		log.Fatal("Fehler beim Initialisieren des Loggers: ", zap.String("error", err.Error()))
+	}
+	defer logger.Sync()
+	log = logger
 	log.Info("Starting webhook receiver")
 
 	// Use the in-cluster config to create a kubernetes client
@@ -107,7 +128,7 @@ func main() {
 	currentNamespace := ""
 
 	//Check if running in-cluster or out-of-cluster
-	_, err := rest.InClusterConfig()
+	_, err = rest.InClusterConfig()
 	if err != nil {
 		log.Debug("Using out of cluster configuration")
 		// Extract the current namespace from the client config
@@ -137,14 +158,12 @@ func main() {
 		configmapNamespace:      *configmapNamespace,
 	}
 
-	addr := flag.String("addr", ":8080", "address to listen for webhook")
-	flag.Parse()
-
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
 	http.HandleFunc("/alert-store", server.alertStoreHandler)
-	http.HandleFunc("/ui", server.uiHandler)
+	http.HandleFunc("/ui", uiHandler)
+	http.HandleFunc("/assets/", assetsHandler)
 
 	log.Info("Starting server on " + *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
@@ -322,20 +341,85 @@ func addJobTTL(jobObject *batchv1.Job) {
 // drops the oldest alert if the array is full
 func (server *clientsetStruct) saveAlert(alert Alert) {
 	alertsArraySize := 10
-	if len(alerts) >= alertsArraySize {
-		alerts = alerts[1:]
+	if len(alertStore) >= alertsArraySize {
+		alertStore = alertStore[1:]
 	}
-	alerts = append(alerts, alert)
+	alertStore = append(alertStore, alert)
+}
+
+// function which filters alerts based on the query
+func filterAlerts(alerts []Alert, query string) []Alert {
+	var filteredAlerts []Alert
+	for _, alert := range alerts {
+		matches := false
+
+		// Check alertname
+		if strings.Contains(strings.ToLower(alert.Labels["alertname"]), strings.ToLower(query)) {
+			matches = true
+		}
+
+		// Check labels (case-insensitive)
+		for _, value := range alert.Labels {
+			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
+				matches = true
+				break
+			}
+		}
+
+		// Check annotations (case-insensitive)
+		for _, value := range alert.Annotations {
+			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
+				matches = true
+				break
+			}
+		}
+
+		if matches {
+			filteredAlerts = append(filteredAlerts, alert)
+		}
+	}
+	return filteredAlerts
+}
+
+func assetsHandler(w http.ResponseWriter, r *http.Request) {
+	// set content type based on file extension
+	contentType := ""
+	switch filepath.Ext(r.URL.Path) {
+	case ".css":
+		contentType = "text/css"
+	case ".js":
+		contentType = "application/javascript"
+	}
+	w.Header().Set("Content-Type", contentType)
+
+	//remove the /assets/ prefix from the URL path to limit access to the web/assets directory
+	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/assets/")
+	path := "web/assets/" + r.URL.Path
+	log.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
+	// serve assets from the web/assets directory
+	http.ServeFile(w, r, path)
 }
 
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
+	var alerts []Alert
+	// Get search query parameter
+	query := r.URL.Query().Get("q")
+
+	// Filter alerts if query is provided
+	if query != "" {
+		alerts = filterAlerts(alertStore, query)
+	} else {
+		alerts = alertStore
+	}
+
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	json.NewEncoder(w).Encode(alerts)
 }
 
 // function which provides the UI to the user
-func (server *clientsetStruct) uiHandler(w http.ResponseWriter, r *http.Request) {
+func uiHandler(w http.ResponseWriter, r *http.Request) {
+	var alerts []Alert
 	w.Header().Set(CONTENTTYPE, "text/html")
 	//Parse the templates in web/templates/
 	tmpl, err := template.ParseFiles("web/templates/alertStore.html.templ")
@@ -344,12 +428,16 @@ func (server *clientsetStruct) uiHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "error parsing templates", http.StatusInternalServerError)
 	}
 
+	query := r.URL.Query().Get("q")
+
+	alerts = getAlerts(query)
+
 	s := struct {
 		Title  string
 		Alerts []Alert
 	}{
 		Title:  "Alert Store",
-		Alerts: getAlerts(),
+		Alerts: alerts,
 	}
 
 	//Execute the templates
@@ -361,8 +449,8 @@ func (server *clientsetStruct) uiHandler(w http.ResponseWriter, r *http.Request)
 }
 
 // function which gets alerts from the alert-store
-func getAlerts() []Alert {
-	resp, err := http.Get("http://localhost:8080/alert-store")
+func getAlerts(query string) []Alert {
+	resp, err := http.Get("http://localhost:8080/alert-store?q=" + query)
 	if err != nil {
 		log.Error("error getting alerts: ", zap.String("error", err.Error()))
 	}

@@ -8,7 +8,8 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500">
     <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
-    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <script src="assets/js/htmx.min.js"></script>
     <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
 </head>
 
@@ -23,15 +24,15 @@
                     style="background-color: white; height:90%;">
                     <i class="material-icons mdc-text-field__icon" tabindex="0" role="button"
                         style="color: black;">search</i>
-                    <input class="mdc-text-field__input" id="search-field" type="text">
-                </div>
+                    <input class="mdc-text-field__input" id="search" type="text" hx-get="/ui" hx-params="q" hx-vars="q:search.value"
+                        hx-trigger="input changed delay:500ms" hx-select=".alert" hx-target="#alerts">
             </section>
         </div>
     </header>
     <main class="mdc-top-app-bar--fixed-adjust" style="display: flex; justify-content: center;">
         <div id="alerts" style="display: grid; align-items: start; width: max-content;">
             {{ range .Alerts }}
-            <div class="alert" style="margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);">
+            <div class="alert" hx-swap="outerHTML">
                 <h2 class="mdc-typography--headline5" style="background-color: #4699ce; color: #ffffff; margin: 0px">
                     {{.Labels.alertname }}</h2>
                 <div class="mdc-typography--body1">
@@ -40,7 +41,7 @@
                     <span class="label-key" style="margin-left: 20px;"><strong>{{ $key }}:</strong></span> <span
                         class="label-value">{{ $value }}</span>
                     {{ else }}
-                        <p class="mdc-typography--body1">No labels found.</p>
+                    <p class="mdc-typography--body1">No labels found.</p>
                     {{ end }}
                 </div>
                 <hr style="border: none; border-top: 1px solid #ccc; width: 98%; margin: 5px auto;">
