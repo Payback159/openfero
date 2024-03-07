@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 const CONTENTTYPE = "Content-Type"
@@ -60,37 +64,72 @@ var log *zap.Logger
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
+func initKubeClient() *kubernetes.Clientset {
+	var kubeconfig *string
+
+	// prepare kubernetes client with in cluster configuration
+	var config *rest.Config
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		log.Debug("Using out of cluster configuration")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+		log.Debug("Using in cluster configuration")
+	}
+	flag.Parse()
+
+	//use the current context in kubeconfig
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	if err != nil {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			log.Fatal("Could not read k8s cluster configuration: %s", zap.String("error", err.Error()))
+		}
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
+	}
+
+	return clientset
+}
+
 func main() {
 	// activate json logging
 	log, _ = zap.NewProduction()
 	defer log.Sync()
 	log.Info("Starting webhook receiver")
 
-	// Extract the current namespace from the mounted secrets
+	// Use the in-cluster config to create a kubernetes client
+	clientset := initKubeClient()
 	defaultNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
-		log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
-	}
+	currentNamespace := ""
 
-	namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
+	//Check if running in-cluster or out-of-cluster
+	_, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
+		log.Debug("Using out of cluster configuration")
+		// Extract the current namespace from the client config
+		currentNamespace, _, err = clientcmd.DefaultClientConfig.Namespace()
+		if err != nil {
+			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+		}
+	} else {
+		log.Debug("Using in cluster configuration")
+		// Extract the current namespace from the mounted secrets
+		if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
+			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+		}
+		namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
+		if err != nil {
+			log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
+		}
+		currentNamespace = string(namespaceDat)
 	}
-
-	currentNamespace := string(namespaceDat)
 
 	configmapNamespace := flag.String("configmapNamespace", currentNamespace, "Kubernetes namespace where jobs are defined")
 	jobDestinationNamespace := flag.String("jobDestinationNamespace", currentNamespace, "Kubernetes namespace where jobs will be created")
-
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err)
-	}
 
 	server := &clientsetStruct{
 		clientset:               *clientset,
@@ -104,7 +143,8 @@ func main() {
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
-	http.HandleFunc("/ui", server.alertStoreHandler)
+	http.HandleFunc("/alert-store", server.alertStoreHandler)
+	http.HandleFunc("/ui", server.uiHandler)
 
 	log.Info("Starting server on " + *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
@@ -292,4 +332,45 @@ func (server *clientsetStruct) saveAlert(alert Alert) {
 func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	json.NewEncoder(w).Encode(alerts)
+}
+
+// function which provides the UI to the user
+func (server *clientsetStruct) uiHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(CONTENTTYPE, "text/html")
+	//Parse the templates in web/templates/
+	tmpl, err := template.ParseFiles("web/templates/alertStore.html.templ")
+	if err != nil {
+		log.Error("error parsing templates: ", zap.String("error", err.Error()))
+		http.Error(w, "error parsing templates", http.StatusInternalServerError)
+	}
+
+	s := struct {
+		Title  string
+		Alerts []Alert
+	}{
+		Title:  "Alert Store",
+		Alerts: getAlerts(),
+	}
+
+	//Execute the templates
+	err = tmpl.Execute(w, s)
+	if err != nil {
+		log.Error("error executing templates: ", zap.String("error", err.Error()))
+		http.Error(w, "error executing templates", http.StatusInternalServerError)
+	}
+}
+
+// function which gets alerts from the alert-store
+func getAlerts() []Alert {
+	resp, err := http.Get("http://localhost:8080/alert-store")
+	if err != nil {
+		log.Error("error getting alerts: ", zap.String("error", err.Error()))
+	}
+	defer resp.Body.Close()
+	var alerts []Alert
+	err = json.NewDecoder(resp.Body).Decode(&alerts)
+	if err != nil {
+		log.Error("error decoding alerts: ", zap.String("error", err.Error()))
+	}
+	return alerts
 }
