@@ -13,11 +13,11 @@
     <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
 </head>
 
-<body style="margin: 0; padding: 0;">
+<body>
     <header class="mdc-top-app-bar" style="background-color: #00529e;">
         <div class="mdc-top-app-bar__row">
             <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
-                <span class="mdc-top-app-bar__title">OpenFero {{ .Title }}</span>
+                <span class="mdc-top-app-bar__title" style="color: white;">OpenFero <span style="color: darkorange;">{{ .Title }}</span></span>
             </section>
             <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-end" role="toolbar">
                 <div class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-leading-icon"
@@ -30,12 +30,12 @@
         </div>
     </header>
     <main class="mdc-top-app-bar--fixed-adjust" style="display: flex; justify-content: center;">
-        <div id="alerts" style="display: grid; align-items: start; width: max-content;">
+        <div id="alerts">
             {{ range .Alerts }}
             <div class="alert" hx-swap="outerHTML">
                 <h2 class="mdc-typography--headline5" style="background-color: #4699ce; color: #ffffff; margin: 0px">
                     {{.Labels.alertname }}</h2>
-                <div class="mdc-typography--body1">
+                <div class="mdc-typography--body1" >
                     <strong>Labels:</strong>
                     {{ range $key, $value := .Labels }}<br>
                     <span class="label-key" style="margin-left: 20px;"><strong>{{ $key }}:</strong></span> <span
@@ -56,7 +56,7 @@
                 </div>
             </div>
             {{ else }}
-            <div class="alert">
+            <div class="no-alerts-found">
                 <p class="mdc-typography--body1">No alerts found.</p>
             </div>
             {{ end }}
