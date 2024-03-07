@@ -104,7 +104,7 @@ func main() {
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
 	http.HandleFunc("/alerts", server.alertsHandler)
-	http.HandleFunc("/alert-store", server.alertStoreHandler)
+	http.HandleFunc("/ui", server.alertStoreHandler)
 
 	log.Info("Starting server on " + *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
