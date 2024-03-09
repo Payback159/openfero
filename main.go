@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 const CONTENTTYPE = "Content-Type"
@@ -60,46 +63,104 @@ var log *zap.Logger
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
-func main() {
-	// activate json logging
-	log, _ = zap.NewProduction()
-	defer log.Sync()
-	log.Info("Starting webhook receiver")
+func initKubeClient() *kubernetes.Clientset {
+	var kubeconfig *string
 
-	// Extract the current namespace from the mounted secrets
-	defaultNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
-		log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+	// prepare kubernetes client with in cluster configuration
+	var config *rest.Config
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		log.Debug("Using out of cluster configuration")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+		log.Debug("Using in cluster configuration")
 	}
+	flag.Parse()
 
-	namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
+	//use the current context in kubeconfig
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
-	}
-
-	currentNamespace := string(namespaceDat)
-
-	configmapNamespace := flag.String("configmapNamespace", currentNamespace, "Kubernetes namespace where jobs are defined")
-	jobDestinationNamespace := flag.String("jobDestinationNamespace", currentNamespace, "Kubernetes namespace where jobs will be created")
-
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Could not read k8s cluster configuration: %s", err))
+		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		panic(err)
+		log.Fatal(fmt.Sprintf("Could not create k8s client: %s", err))
 	}
+
+	return clientset
+}
+
+func main() {
+
+	// Parse command line arguments
+	addr := flag.String("addr", ":8080", "address to listen for webhook")
+	logLevel := flag.String("logLevel", "info", "log level")
+	flag.Parse()
+
+	// Konfiguriere das Log-Level
+	var cfg zap.Config
+	switch strings.ToLower(*logLevel) {
+	case "debug":
+		cfg = zap.NewDevelopmentConfig()
+	case "info":
+		cfg = zap.NewProductionConfig()
+	default:
+		log.Fatal("Invalid log level specified")
+	}
+
+	// Aktiviere das JSON-Logging
+	logger, err := cfg.Build()
+	if err != nil {
+		log.Fatal("Error initializing the logger: ", zap.String("error", err.Error()))
+	}
+	defer func() {
+		syncErr := logger.Sync()
+		if syncErr != nil {
+			log.Fatal("Error syncing the logger: ", zap.String("error", syncErr.Error()))
+		}
+	}()
+	log = logger
+	log.Info("Starting webhook receiver")
+
+	// Use the in-cluster config to create a kubernetes client
+	clientset := initKubeClient()
+	defaultNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	currentNamespace := ""
+
+	//Check if running in-cluster or out-of-cluster
+	_, err = rest.InClusterConfig()
+	if err != nil {
+		log.Debug("Using out of cluster configuration")
+		// Extract the current namespace from the client config
+		currentNamespace, _, err = clientcmd.DefaultClientConfig.Namespace()
+		if err != nil {
+			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+		}
+	} else {
+		log.Debug("Using in cluster configuration")
+		// Extract the current namespace from the mounted secrets
+		if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
+			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+		}
+		namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
+		if err != nil {
+			log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
+		}
+		currentNamespace = string(namespaceDat)
+	}
+
+	configmapNamespace := flag.String("configmapNamespace", currentNamespace, "Kubernetes namespace where jobs are defined")
+	jobDestinationNamespace := flag.String("jobDestinationNamespace", currentNamespace, "Kubernetes namespace where jobs will be created")
 
 	server := &clientsetStruct{
 		clientset:               *clientset,
 		jobDestinationNamespace: *jobDestinationNamespace,
 		configmapNamespace:      *configmapNamespace,
 	}
-
-	addr := flag.String("addr", ":8080", "address to listen for webhook")
-	flag.Parse()
 
 	http.HandleFunc("/healthz", server.healthzHandler)
 	http.HandleFunc("/readiness", server.readinessHandler)
@@ -291,5 +352,10 @@ func (server *clientsetStruct) saveAlert(alert Alert) {
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
-	json.NewEncoder(w).Encode(alerts)
+	err := json.NewEncoder(w).Encode(alerts)
+	if err != nil {
+		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
