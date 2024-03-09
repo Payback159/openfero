@@ -32,5 +32,6 @@ jobs:
         env:
           VALIDATE_ALL_CODEBASE: false
           VALIDATE_CHECKOV: false
-          DEFAULT_BRANCH: "main"
+          VALIDATE_GO: false
+          DEFAULT_BRANCH: "origin/main"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
