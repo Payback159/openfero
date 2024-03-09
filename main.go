@@ -117,7 +117,12 @@ func main() {
 	if err != nil {
 		log.Fatal("Error initializing the logger: ", zap.String("error", err.Error()))
 	}
-	defer logger.Sync()
+	defer func() {
+		err := logger.Sync()
+		if err != nil {
+			log.Fatal("Error syncing the logger: ", zap.String("error", err.Error()))
+		}
+	}()
 	log = logger
 	log.Info("Starting webhook receiver")
 
@@ -347,5 +352,10 @@ func (server *clientsetStruct) saveAlert(alert Alert) {
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
-	json.NewEncoder(w).Encode(alerts)
+	err := json.NewEncoder(w).Encode(alerts)
+	if err != nil {
+		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
