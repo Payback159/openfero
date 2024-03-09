@@ -118,9 +118,9 @@ func main() {
 		log.Fatal("Error initializing the logger: ", zap.String("error", err.Error()))
 	}
 	defer func() {
-		err := logger.Sync()
-		if err != nil {
-			log.Fatal("Error syncing the logger: ", zap.String("error", err.Error()))
+		syncErr := logger.Sync()
+		if syncErr != nil {
+			log.Fatal("Error syncing the logger: ", zap.String("error", syncErr.Error()))
 		}
 	}()
 	log = logger
