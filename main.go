@@ -63,7 +63,13 @@ const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 func main() {
 	// activate json logging
 	log, _ = zap.NewProduction()
-	defer log.Sync()
+	defer func() {
+		err := log.Sync()
+		if err != nil {
+			log.Error("Failed to sync log", zap.Error(err))
+		}
+	}()
+
 	log.Info("Starting webhook receiver")
 
 	// Extract the current namespace from the mounted secrets
@@ -291,5 +297,9 @@ func (server *clientsetStruct) saveAlert(alert Alert) {
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
-	json.NewEncoder(w).Encode(alerts)
+	err := json.NewEncoder(w).Encode(alerts)
+	if err != nil {
+		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
+		return
+	}
 }
