@@ -1,6 +1,6 @@
 # build stage
-# golang:1.21.6-bookworm
-FROM golang@sha256:d8c365d63879c2312e332cb796961f2695dd65124ceb3c0247d9c5426b7dde5f AS build-env
+# golang:1.22.1-bookworm
+FROM golang@sha256:6699d2852712f090399ccd4e8dfd079b4d55376f3ab3aff5b2dc8b7b1c11e27e AS build-env
 
 COPY certs/ /usr/local/share/ca-certificates/
 RUN update-ca-certificates && \
