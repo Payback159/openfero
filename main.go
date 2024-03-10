@@ -163,12 +163,13 @@ func main() {
 		configmapNamespace:      *configmapNamespace,
 	}
 
-	http.HandleFunc("/healthz", server.healthzHandler)
-	http.HandleFunc("/readiness", server.readinessHandler)
-	http.HandleFunc("/alerts", server.alertsHandler)
-	http.HandleFunc("/alert-store", server.alertStoreHandler)
-	http.HandleFunc("/ui", uiHandler)
-	http.HandleFunc("/assets/", assetsHandler)
+	http.HandleFunc("GET /healthz", server.healthzGetHandler)
+	http.HandleFunc("GET /readiness", server.readinessGetHandler)
+	http.HandleFunc("GET /alert-store", server.alertStoreGetHandler)
+	http.HandleFunc("GET /alerts", server.alertsGetHandler)
+	http.HandleFunc("POST /alerts", server.alertsPostHandler)
+	http.HandleFunc("GET /ui", uiHandler)
+	http.HandleFunc("GET /assets/", assetsHandler)
 
 	log.Info("Starting server on " + *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
@@ -191,13 +192,13 @@ func StringWithCharset(length int, charset string) string {
 }
 
 // handling healthness probe
-func (server *clientsetStruct) healthzHandler(w http.ResponseWriter, r *http.Request) {
+func (server *clientsetStruct) healthzGetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	w.WriteHeader(http.StatusOK)
 }
 
 // handling readiness probe
-func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.Request) {
+func (server *clientsetStruct) readinessGetHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Error("error listing ConfigMaps: ", zap.String("error", err.Error()))
@@ -208,19 +209,8 @@ func (server *clientsetStruct) readinessHandler(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusOK)
 }
 
-func (server *clientsetStruct) alertsHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		server.getHandler(w, r)
-	case http.MethodPost:
-		server.postHandler(w, r)
-	default:
-		http.Error(w, "unsupported HTTP method", http.StatusBadRequest)
-	}
-}
-
 // Handling get requests to listen received alerts
-func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
+func (server *clientsetStruct) alertsGetHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 	// Alertmanager expects an 200 OK response, otherwise send_resolved will never work
 	enc := json.NewEncoder(httpwriter)
 	httpwriter.Header().Set(CONTENTTYPE, APPLICATIONJSON)
@@ -233,7 +223,7 @@ func (server *clientsetStruct) getHandler(httpwriter http.ResponseWriter, httpre
 }
 
 // Handling the Alertmanager Post-Requests
-func (server *clientsetStruct) postHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
+func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 
 	dec := json.NewDecoder(httprequest.Body)
 	defer httprequest.Body.Close()
@@ -406,7 +396,7 @@ func assetsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // function which provides alerts array to the getHandler
-func (server *clientsetStruct) alertStoreHandler(w http.ResponseWriter, r *http.Request) {
+func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *http.Request) {
 	var alerts []Alert
 	// Get search query parameter
 	query := r.URL.Query().Get("q")
