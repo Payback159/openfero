@@ -110,15 +110,20 @@ func main() {
 	case "info":
 		cfg = zap.NewProductionConfig()
 	default:
-		log.Fatal("Ungültiges Log-Level angegeben")
+		log.Fatal("Invalid log level specified")
 	}
 
 	// Aktiviere das JSON-Logging
 	logger, err := cfg.Build()
 	if err != nil {
-		log.Fatal("Fehler beim Initialisieren des Loggers: ", zap.String("error", err.Error()))
+		log.Fatal("Error initializing the logger: ", zap.String("error", err.Error()))
 	}
-	defer logger.Sync()
+	defer func() {
+		syncErr := logger.Sync()
+		if syncErr != nil {
+			log.Fatal("Error syncing the logger: ", zap.String("error", syncErr.Error()))
+		}
+	}()
 	log = logger
 	log.Info("Starting webhook receiver")
 
