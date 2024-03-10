@@ -15,7 +15,7 @@ func TestGetAlertsHandler(t *testing.T) {
 	}
 	responserecorder := httptest.NewRecorder()
 
-	(*clientsetStruct).alertsHandler(nil, responserecorder, req)
+	(*clientsetStruct).alertsGetHandler(nil, responserecorder, req)
 
 	if status := responserecorder.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code: got %v want %v",
@@ -41,7 +41,7 @@ func TestSingleAlertPostAlertsHandler(t *testing.T) {
 	}
 	responserecorder := httptest.NewRecorder()
 
-	(*clientsetStruct).alertsHandler(nil, responserecorder, req)
+	(*clientsetStruct).alertsGetHandler(nil, responserecorder, req)
 
 	if status := responserecorder.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code: got %v want %v",
