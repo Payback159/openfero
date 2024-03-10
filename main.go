@@ -409,7 +409,11 @@ func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *ht
 	}
 
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
-	json.NewEncoder(w).Encode(alerts)
+	err := json.NewEncoder(w).Encode(alerts)
+	if err != nil {
+		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
+		http.Error(w, "error encoding alerts", http.StatusInternalServerError)
+	}
 }
 
 // function which provides the UI to the user

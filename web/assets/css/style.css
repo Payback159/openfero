@@ -20,7 +20,7 @@ body {
     margin: 10px 0;
     border: 1px solid #ccc;
     border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 5px rgba(0 0 0 / 15%);
 }
 
 .mdc-typography--body1 > div {
