@@ -387,9 +387,8 @@ func assetsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 
-	//remove the /assets/ prefix from the URL path to limit access to the web/assets directory
-	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/assets/")
-	path := "web/assets/" + r.URL.Path
+	// sanitize the URL path to prevent path traversal
+	path := filepath.Join("web", filepath.Clean(r.URL.Path))
 	log.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
 	// serve assets from the web/assets directory
 	http.ServeFile(w, r, path)
