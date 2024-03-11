@@ -8,9 +8,6 @@
 
 version: 1
 
-env:
-  - VERSION=v{{ .Version }}
-
 before:
   hooks:
     # You may remove this if you don't use go modules.
@@ -42,7 +39,7 @@ archives:
 
 dockers:
   - image_templates:
-      - ghcr.io/payback159/openfero:{{ .Env.VERSION }}-amd64
+      - ghcr.io/payback159/openfero:v{{ .Version }}-amd64
     dockerfile: goreleaser.dockerfile
     use: buildx
     goarch: amd64
@@ -54,7 +51,7 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/amd64"
   - image_templates:
-      - ghcr.io/payback159/openfero:{{ .Env.VERSION }}-arm64
+      - ghcr.io/payback159/openfero:v{{ .Version }}-arm64
     dockerfile: goreleaser.dockerfile
     use: buildx
     goarch: arm64
@@ -66,14 +63,14 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64"
 docker_manifests:
-  - name_template: "ghcr.io/payback159/openfero:{{ .Env.VERSION }}"
+  - name_template: "ghcr.io/payback159/openfero:v{{ .Version }}"
     image_templates:
-    - "ghcr.io/payback159/openfero:{{ .Env.VERSION }}-amd64"
-    - "ghcr.io/payback159/openfero:{{ .Env.VERSION }}-arm64"
+    - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
+    - "ghcr.io/payback159/openfero:v{{ .Version }}-arm64"
   - name_template: "ghcr.io/payback159/openfero:latest"
     image_templates:
-      - "ghcr.io/payback159/openfero:{{ .Env.VERSION }}-amd64"
-      - "ghcr.io/payback159/openfero:{{ .Env.VERSION }}-arm64"
+      - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
+      - "ghcr.io/payback159/openfero:v{{ .Version }}-arm64"
 
 changelog:
   sort: asc
