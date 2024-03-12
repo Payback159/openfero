@@ -1,0 +1,35 @@
+/* styles.css */
+
+body {
+    margin: 0;
+    padding: 0;
+}
+
+.mdc-top-app-bar--fixed-adjust {
+    display: flex;
+    justify-content: center;
+}
+
+#alerts {
+    display: grid;
+    align-items: start;
+    width: max-content;
+}
+
+.alert {
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0 0 0 / 15%);
+}
+
+.mdc-typography--body1 > div {
+    margin-left: 20px;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #ccc;
+    width: 90%;
+    margin: 10px auto;
+}

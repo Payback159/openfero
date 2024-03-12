@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>{{ .Title }}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500">
+    <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <script src="assets/js/htmx.min.js"></script>
+    <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
+</head>
+
+<body>
+    <header class="mdc-top-app-bar" style="background-color: #00529e;">
+        <div class="mdc-top-app-bar__row">
+            <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
+                <span class="mdc-top-app-bar__title" style="color: white;">OpenFero <span style="color: darkorange;">{{ .Title }}</span></span>
+            </section>
+            <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-end" role="toolbar">
+                <div class="mdc-text-field mdc-text-field--outlined mdc-text-field--with-leading-icon"
+                    style="background-color: white; height:90%;">
+                    <i class="material-icons mdc-text-field__icon" tabindex="0" role="button"
+                        style="color: black;">search</i>
+                    <input class="mdc-text-field__input" id="search" type="text" hx-get="/ui" hx-params="q" hx-vars="q:search.value"
+                        hx-trigger="input changed delay:500ms" hx-select=".alert" hx-target="#alerts">
+            </section>
+        </div>
+    </header>
+    <main class="mdc-top-app-bar--fixed-adjust" style="display: flex; justify-content: center;">
+        <div id="alerts">
+            {{ range .Alerts }}
+            <div class="alert" hx-swap="outerHTML">
+                <h2 class="mdc-typography--headline5" style="background-color: #4699ce; color: #ffffff; margin: 0px">
+                    {{.Labels.alertname }}</h2>
+                <div class="mdc-typography--body1" >
+                    <strong>Labels:</strong>
+                    {{ range $key, $value := .Labels }}<br>
+                    <span class="label-key" style="margin-left: 20px;"><strong>{{ $key }}:</strong></span> <span
+                        class="label-value">{{ $value }}</span>
+                    {{ else }}
+                    <p class="mdc-typography--body1">No labels found.</p>
+                    {{ end }}
+                </div>
+                <hr style="border: none; border-top: 1px solid #ccc; width: 98%; margin: 5px auto;">
+                <div class="mdc-typography--body1">
+                    <strong>Annotations:</strong>
+                    {{ range $key, $value := .Annotations }}<br>
+                    <span class="annotation-key" style="margin-left: 20px;">{{ $key }}:</span> <span
+                        class="annotation-value">{{ $value }}</span>
+                    {{ else }}
+                    <p class="mdc-typography--body1">No annotations found.</p>
+                    {{ end }}
+                </div>
+            </div>
+            {{ else }}
+            <div class="no-alerts-found">
+                <p class="mdc-typography--body1">No alerts found.</p>
+            </div>
+            {{ end }}
+        </div>
+        </div>
+    </main>
+    <script>
+        mdc.autoInit();
+    </script>
+</body>
+
+</html>

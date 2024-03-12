@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"math/big"
 	"net/http"
 	"os"
@@ -58,7 +59,7 @@ type (
 	}
 )
 
-var alerts []Alert
+var alertStore []Alert
 var log *zap.Logger
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -82,13 +83,13 @@ func initKubeClient() *kubernetes.Clientset {
 	if err != nil {
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Could not read k8s cluster configuration: %s", err))
+			log.Fatal("Could not read k8s cluster configuration: %s", zap.String("error", err.Error()))
 		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Could not create k8s client: %s", err))
+		log.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
 	}
 
 	return clientset
@@ -167,6 +168,8 @@ func main() {
 	http.HandleFunc("GET /alert-store", server.alertStoreGetHandler)
 	http.HandleFunc("GET /alerts", server.alertsGetHandler)
 	http.HandleFunc("POST /alerts", server.alertsPostHandler)
+	http.HandleFunc("GET /ui", uiHandler)
+	http.HandleFunc("GET /assets/", assetsHandler)
 
 	log.Info("Starting server on " + *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
@@ -333,19 +336,127 @@ func addJobTTL(jobObject *batchv1.Job) {
 // drops the oldest alert if the array is full
 func (server *clientsetStruct) saveAlert(alert Alert) {
 	alertsArraySize := 10
-	if len(alerts) >= alertsArraySize {
-		alerts = alerts[1:]
+	if len(alertStore) >= alertsArraySize {
+		alertStore = alertStore[1:]
 	}
-	alerts = append(alerts, alert)
+	alertStore = append(alertStore, alert)
+}
+
+// function which filters alerts based on the query
+func filterAlerts(alerts []Alert, query string) []Alert {
+	var filteredAlerts []Alert
+	for _, alert := range alerts {
+		matches := false
+
+		// Check alertname
+		if strings.Contains(strings.ToLower(alert.Labels["alertname"]), strings.ToLower(query)) {
+			matches = true
+		}
+
+		// Check labels (case-insensitive)
+		for _, value := range alert.Labels {
+			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
+				matches = true
+				break
+			}
+		}
+
+		// Check annotations (case-insensitive)
+		for _, value := range alert.Annotations {
+			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
+				matches = true
+				break
+			}
+		}
+
+		if matches {
+			filteredAlerts = append(filteredAlerts, alert)
+		}
+	}
+	return filteredAlerts
+}
+
+func assetsHandler(w http.ResponseWriter, r *http.Request) {
+	// set content type based on file extension
+	contentType := ""
+	switch filepath.Ext(r.URL.Path) {
+	case ".css":
+		contentType = "text/css"
+	case ".js":
+		contentType = "application/javascript"
+	}
+	w.Header().Set("Content-Type", contentType)
+
+	// sanitize the URL path to prevent path traversal
+	path := filepath.Join("web", filepath.Clean(r.URL.Path))
+	log.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
+	// serve assets from the web/assets directory
+	http.ServeFile(w, r, path)
 }
 
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *http.Request) {
+	var alerts []Alert
+	// Get search query parameter
+	query := r.URL.Query().Get("q")
+
+	// Filter alerts if query is provided
+	if query != "" {
+		alerts = filterAlerts(alertStore, query)
+	} else {
+		alerts = alertStore
+	}
+
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	err := json.NewEncoder(w).Encode(alerts)
 	if err != nil {
 		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		http.Error(w, "error encoding alerts", http.StatusInternalServerError)
 	}
+}
+
+// function which provides the UI to the user
+func uiHandler(w http.ResponseWriter, r *http.Request) {
+	var alerts []Alert
+	w.Header().Set(CONTENTTYPE, "text/html")
+	//Parse the templates in web/templates/
+	tmpl, err := template.ParseFiles("web/templates/alertStore.html.templ")
+	if err != nil {
+		log.Error("error parsing templates: ", zap.String("error", err.Error()))
+		http.Error(w, "error parsing templates", http.StatusInternalServerError)
+	}
+
+	query := r.URL.Query().Get("q")
+
+	alerts = getAlerts(query)
+
+	s := struct {
+		Title  string
+		Alerts []Alert
+	}{
+		Title:  "Alert Store",
+		Alerts: alerts,
+	}
+
+	//Execute the templates
+	err = tmpl.Execute(w, s)
+	if err != nil {
+		log.Error("error executing templates: ", zap.String("error", err.Error()))
+		http.Error(w, "error executing templates", http.StatusInternalServerError)
+	}
+}
+
+// function which gets alerts from the alert-store
+func getAlerts(query string) []Alert {
+	resp, err := http.Get("http://localhost:8080/alert-store?q=" + query)
+	if err != nil {
+		log.Error("error getting alerts: ", zap.String("error", err.Error()))
+	}
+	defer resp.Body.Close()
+	var alerts []Alert
+	err = json.NewDecoder(resp.Body).Decode(&alerts)
+	if err != nil {
+		log.Error("error decoding alerts: ", zap.String("error", err.Error()))
+	}
+	return alerts
 }
