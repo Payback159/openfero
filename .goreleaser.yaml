@@ -50,6 +50,8 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/amd64"
+    extra_files:
+      - web/
   - image_templates:
       - ghcr.io/payback159/openfero:v{{ .Version }}-arm64
     dockerfile: goreleaser.dockerfile
@@ -62,6 +64,8 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64"
+    extra_files:
+      - web/
 docker_manifests:
   - name_template: "ghcr.io/payback159/openfero:v{{ .Version }}"
     image_templates:
