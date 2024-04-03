@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -388,10 +389,42 @@ func assetsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentType)
 
 	// sanitize the URL path to prevent path traversal
-	path := filepath.Join("web", filepath.Clean(r.URL.Path))
+	path, err := verifyPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid path specified", http.StatusBadRequest)
+		return
+	}
 	log.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
 	// serve assets from the web/assets directory
 	http.ServeFile(w, r, path)
+}
+
+func verifyPath(path string) (string, error) {
+	trustedRoot := "/app/web"
+
+	p, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		fmt.Println("Error " + err.Error())
+		return path, errors.New("unsafe or invalid path specified")
+	}
+
+	err = inTrustedRoot(p, trustedRoot)
+	if err != nil {
+		fmt.Println("Error " + err.Error())
+		return p, errors.New("unsafe or invalid path specified")
+	} else {
+		return p, nil
+	}
+}
+
+func inTrustedRoot(path string, trustedRoot string) error {
+	for path != "/" {
+		path = filepath.Dir(path)
+		if path == trustedRoot {
+			return nil
+		}
+	}
+	return errors.New("path is outside of trusted root")
 }
 
 // function which provides alerts array to the getHandler
