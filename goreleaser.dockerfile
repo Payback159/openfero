@@ -1,6 +1,6 @@
 # build stage
 # golang:1.22.2-bookworm
-FROM golang@sha256:48b942a5a9803fafeb748f1a9c6edeb71e06653bb4df25f63f909151e15e9618 AS build-env
+FROM golang@sha256:c4fb952e712efd8f787bcd8e53fd66d1d83b7dc26adabc218e9eac1dbf776bdf AS build-env
 
 RUN echo "openfero:x:10001:10001:OpenFero user:/app:/sbin/nologin" >> /etc/passwd_single && \
     echo "openfero:x:10001:" >> /etc/group_single
