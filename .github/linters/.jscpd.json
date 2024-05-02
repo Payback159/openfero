@@ -1,0 +1,7 @@
+{
+    "threshold": 0,
+    "ignore": [
+        "**/test/**",
+        "**/k8s-deployment/**"
+    ]
+}
