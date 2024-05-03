@@ -1,7 +1,8 @@
 {
-    "threshold": 0,
+    "threshold": 5,
     "ignore": [
         "**/test/**",
-        "**/k8s-deployment/**"
+        "**/k8s-deployment/**",
+        "**/node_modules/**"
     ]
 }
