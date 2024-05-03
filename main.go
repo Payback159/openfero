@@ -205,7 +205,7 @@ func addMetricsToPrometheusRegistry() {
 // getMetricsOptions function to get prometheus options for a metric
 func getMetricsOptions(metric metrics.Description) prometheus.Opts {
 	tokens := strings.Split(metric.Name, "/")
-	fmt.Printf("%s\n", metric.Name)
+	logger.Error("error getting metric options: ", zap.String("error", metric.Name))
 	if len(tokens) < 2 {
 		return prometheus.Opts{}
 	}
@@ -471,14 +471,14 @@ func verifyPath(path string) (string, error) {
 	logger.Debug("Verifying path " + path)
 	p, err := filepath.EvalSymlinks(trustedRoot + path)
 	if err != nil {
-		fmt.Println("Error " + err.Error())
+		logger.Error("Error evaluating path: ", zap.String("error", err.Error()))
 		return path, errors.New(errmsg)
 	}
 
 	logger.Debug("Evaluated path " + p)
 	err = inTrustedRoot(p, trustedRoot)
 	if err != nil {
-		fmt.Println("Error " + err.Error())
+		logger.Error("Path is outside of trusted root: ", zap.String("path", p))
 		return p, errors.New(errmsg)
 	} else {
 		return p, nil
