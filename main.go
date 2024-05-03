@@ -462,7 +462,7 @@ func verifyPath(path string) (string, error) {
 	errmsg := "unsafe or invalid path specified"
 	wd, err := os.Getwd()
 	if err != nil {
-		logger.Error("Error getting working directory: ", zap.String("error", err.Error())
+		logger.Error("Error getting working directory: ", zap.String("error", err.Error()))
 		return path, errors.New(errmsg)
 	}
 	trustedRoot := wd + "/web"
