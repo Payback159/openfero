@@ -12,13 +12,17 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/metrics"
 	"strings"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/Payback159/openfero/pkg/logger"
+	"github.com/Payback159/openfero/pkg/metadata"
 	"github.com/ghodss/yaml"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -61,7 +65,6 @@ type (
 )
 
 var alertStore []Alert
-var log *zap.Logger
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
@@ -72,10 +75,10 @@ func initKubeClient() *kubernetes.Clientset {
 	var config *rest.Config
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-		log.Debug("Using out of cluster configuration")
+		logger.Debug("Using out of cluster configuration")
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-		log.Debug("Using in cluster configuration")
+		logger.Debug("Using in cluster configuration")
 	}
 	flag.Parse()
 
@@ -84,13 +87,13 @@ func initKubeClient() *kubernetes.Clientset {
 	if err != nil {
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			log.Fatal("Could not read k8s cluster configuration: %s", zap.String("error", err.Error()))
+			logger.Fatal("Could not read k8s cluster configuration: %s", zap.String("error", err.Error()))
 		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
+		logger.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
 	}
 
 	return clientset
@@ -101,9 +104,10 @@ func main() {
 	// Parse command line arguments
 	addr := flag.String("addr", ":8080", "address to listen for webhook")
 	logLevel := flag.String("logLevel", "info", "log level")
+
 	flag.Parse()
 
-	// Konfiguriere das Log-Level
+	// configure logger
 	var cfg zap.Config
 	switch strings.ToLower(*logLevel) {
 	case "debug":
@@ -111,22 +115,13 @@ func main() {
 	case "info":
 		cfg = zap.NewProductionConfig()
 	default:
-		log.Fatal("Invalid log level specified")
+		logger.Fatal("Invalid log level specified")
 	}
 
-	// Aktiviere das JSON-Logging
-	logger, err := cfg.Build()
-	if err != nil {
-		log.Fatal("Error initializing the logger: ", zap.String("error", err.Error()))
+	// activate json logging
+	if logger.SetConfig(cfg) != nil {
+		logger.Fatal("Could not set logger configuration")
 	}
-	defer func() {
-		syncErr := logger.Sync()
-		if syncErr != nil {
-			log.Fatal("Error syncing the logger: ", zap.String("error", syncErr.Error()))
-		}
-	}()
-	log = logger
-	log.Info("Starting webhook receiver")
 
 	// Use the in-cluster config to create a kubernetes client
 	clientset := initKubeClient()
@@ -134,23 +129,23 @@ func main() {
 	currentNamespace := ""
 
 	//Check if running in-cluster or out-of-cluster
-	_, err = rest.InClusterConfig()
+	_, err := rest.InClusterConfig()
 	if err != nil {
-		log.Debug("Using out of cluster configuration")
+		logger.Debug("Using out of cluster configuration")
 		// Extract the current namespace from the client config
 		currentNamespace, _, err = clientcmd.DefaultClientConfig.Namespace()
 		if err != nil {
-			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+			logger.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
 		}
 	} else {
-		log.Debug("Using in cluster configuration")
+		logger.Debug("Using in cluster configuration")
 		// Extract the current namespace from the mounted secrets
 		if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
-			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+			logger.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
 		}
 		namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
 		if err != nil {
-			log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
+			logger.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
 		}
 		currentNamespace = string(namespaceDat)
 	}
@@ -164,18 +159,75 @@ func main() {
 		configmapNamespace:      *configmapNamespace,
 	}
 
+	//register metrics and set prometheus handler
+	addMetricsToPrometheusRegistry()
+	http.Handle(metadata.MetricsPath, promhttp.Handler())
+
+	logger.Info("Starting webhook receiver")
 	http.HandleFunc("GET /healthz", server.healthzGetHandler)
 	http.HandleFunc("GET /readiness", server.readinessGetHandler)
-	http.HandleFunc("GET /alert-store", server.alertStoreGetHandler)
+	http.HandleFunc("GET /alertStore", server.alertStoreGetHandler)
 	http.HandleFunc("GET /alerts", server.alertsGetHandler)
 	http.HandleFunc("POST /alerts", server.alertsPostHandler)
 	http.HandleFunc("GET /ui", uiHandler)
 	http.HandleFunc("GET /assets/", assetsHandler)
 
-	log.Info("Starting server on " + *addr)
+	logger.Info("Starting server on " + *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
-		log.Fatal("error starting server: ", zap.String("error", err.Error()))
+		logger.Fatal("error starting server: ", zap.String("error", err.Error()))
 	}
+}
+
+// function which registers metrics to the prometheus registry
+func addMetricsToPrometheusRegistry() {
+	// Get descriptions for all supported metrics.
+	metricsMeta := metrics.All()
+	// Register metrics and retrieve the values in prometheus client
+	for i := range metricsMeta {
+		meta := metricsMeta[i]
+		opts := getMetricsOptions(metricsMeta[i])
+		if meta.Cumulative {
+			// Register as a counter
+			funcCounter := prometheus.NewCounterFunc(prometheus.CounterOpts(opts), func() float64 {
+				return metadata.GetSingleMetricFloat(meta.Name)
+			})
+			prometheus.MustRegister(funcCounter)
+		} else {
+			// Register as a gauge
+			funcGauge := prometheus.NewGaugeFunc(prometheus.GaugeOpts(opts), func() float64 {
+				return metadata.GetSingleMetricFloat(meta.Name)
+			})
+			prometheus.MustRegister(funcGauge)
+		}
+	}
+}
+
+// getMetricsOptions function to get prometheus options for a metric
+func getMetricsOptions(metric metrics.Description) prometheus.Opts {
+	tokens := strings.Split(metric.Name, "/")
+	logger.Error("error getting metric options: ", zap.String("error", metric.Name))
+	if len(tokens) < 2 {
+		return prometheus.Opts{}
+	}
+	nameTokens := strings.Split(tokens[len(tokens)-1], ":")
+	// create a unique name for metric, that will be its primary key on the registry
+	validName := normalizePrometheusName(strings.Join(nameTokens[:2], "_"))
+	subsystem := metadata.GetMetricSubsystemName(metric)
+
+	units := nameTokens[1]
+	help := fmt.Sprintf("Units:%s, %s", units, metric.Description)
+	opts := prometheus.Opts{
+		Namespace: tokens[1],
+		Subsystem: subsystem,
+		Name:      validName,
+		Help:      help,
+	}
+	return opts
+}
+
+// normalizePrometheusName function to normalize prometheus name
+func normalizePrometheusName(name string) string {
+	return strings.TrimSpace(strings.ReplaceAll(name, "-", "_"))
 }
 
 // Use crypto/rand to generate a random string of a given length and charset
@@ -184,7 +236,7 @@ func StringWithCharset(length int, charset string) string {
 	for i := range randombytes {
 		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		if err != nil {
-			log.Error("error generating random string: ", zap.String("error", err.Error()))
+			logger.Error("error generating random string: ", zap.String("error", err.Error()))
 		}
 		randombytes[i] = charset[num.Int64()]
 	}
@@ -202,7 +254,7 @@ func (server *clientsetStruct) healthzGetHandler(w http.ResponseWriter, r *http.
 func (server *clientsetStruct) readinessGetHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Error("error listing ConfigMaps: ", zap.String("error", err.Error()))
+		logger.Error("error listing ConfigMaps: ", zap.String("error", err.Error()))
 		http.Error(w, "ConfigMaps could not be listed. Does the ServiceAccount of OpenFero also have the necessary permissions?", http.StatusInternalServerError)
 		return
 	}
@@ -218,7 +270,7 @@ func (server *clientsetStruct) alertsGetHandler(httpwriter http.ResponseWriter, 
 	httpwriter.WriteHeader(http.StatusOK)
 
 	if err := enc.Encode("OK"); err != nil {
-		log.Error("error encoding messages: ", zap.String("error", err.Error()))
+		logger.Error("error encoding messages: ", zap.String("error", err.Error()))
 		http.Error(httpwriter, "error encoding messages", http.StatusInternalServerError)
 	}
 }
@@ -231,7 +283,7 @@ func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter,
 
 	var message HookMessage
 	if err := dec.Decode(&message); err != nil {
-		log.Error("error decoding message: ", zap.String("error", err.Error()))
+		logger.Error("error decoding message: ", zap.String("error", err.Error()))
 		http.Error(httpwriter, "invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -241,16 +293,16 @@ func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter,
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(alertcount)
 
-	log.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
+	logger.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
 	if status == "resolved" || status == "firing" {
-		log.Info("Create ResponseJobs")
+		logger.Info("Create ResponseJobs")
 		for _, alert := range message.Alerts {
 			go server.createResponseJob(&waitgroup, alert, status, httpwriter)
 		}
 		waitgroup.Wait()
 	} else {
-		log.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
+		logger.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
 		return
 	}
 
@@ -267,10 +319,10 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	server.saveAlert(alert)
 	alertname := sanitizeInput(alert.Labels["alertname"])
 	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
-	log.Info("Try to load configmap " + responsesConfigmap)
+	logger.Info("Try to load configmap " + responsesConfigmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
 	if err != nil {
-		log.Error("error getting configmap: ", zap.String("error", err.Error()))
+		logger.Error("error getting configmap: ", zap.String("error", err.Error()))
 		return
 	}
 
@@ -279,14 +331,14 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	if jobDefinition != "" {
 		yamlJobDefinition = []byte(jobDefinition)
 	} else {
-		log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
+		logger.Error("Could not find a data block with the key " + alertname + " in the configmap.")
 		return
 	}
 	// yamlJobDefinition contains a []byte of the yaml job spec
 	// convert the yaml to json so it works with Unmarshal
 	jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
 	if err != nil {
-		log.Error("error while converting YAML job definition to JSON: ", zap.String("error", err.Error()))
+		logger.Error("error while converting YAML job definition to JSON: ", zap.String("error", err.Error()))
 		return
 	}
 	randomstring := StringWithCharset(5, charset)
@@ -294,14 +346,14 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	jobObject := &batchv1.Job{}
 	err = json.Unmarshal(jsonBytes, jobObject)
 	if err != nil {
-		log.Error("Error while using unmarshal on received job: ", zap.String("error", err.Error()))
+		logger.Error("Error while using unmarshal on received job: ", zap.String("error", err.Error()))
 		return
 	}
 
 	// Adding randomString to avoid name conflict
 	jobObject.SetName(jobObject.Name + "-" + randomstring)
 	// Adding Labels as Environment variables
-	log.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
+	logger.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
 	for labelkey, labelvalue := range alert.Labels {
 		jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
 	}
@@ -315,13 +367,13 @@ func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, aler
 	jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
 
 	// Create job
-	log.Info("Creating job " + jobObject.Name)
+	logger.Info("Creating job " + jobObject.Name)
 	_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
 	if err != nil {
-		log.Error("error creating job: ", zap.String("error", err.Error()))
+		logger.Error("error creating job: ", zap.String("error", err.Error()))
 		return
 	}
-	log.Info("Created job " + jobObject.Name)
+	logger.Info("Created job " + jobObject.Name)
 }
 
 func checkJobTTL(jobObject *batchv1.Job) bool {
@@ -378,6 +430,7 @@ func filterAlerts(alerts []Alert, query string) []Alert {
 }
 
 func assetsHandler(w http.ResponseWriter, r *http.Request) {
+	logger.Debug("Called asset " + r.URL.Path)
 	// set content type based on file extension
 	contentType := ""
 	switch filepath.Ext(r.URL.Path) {
@@ -394,29 +447,49 @@ func assetsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid path specified", http.StatusBadRequest)
 		return
 	}
-	log.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
+
+	logger.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
 	// serve assets from the web/assets directory
 	http.ServeFile(w, r, path)
 }
 
+// verifyPath verifies and evaluates the given path to ensure it is safe and valid.
+// It checks if the path is within the trusted root directory and evaluates any symbolic links.
+// If the path is unsafe or invalid, it returns an error.
+// Otherwise, it returns the evaluated path.
 func verifyPath(path string) (string, error) {
-	trustedRoot := "/app/web"
-
-	p, err := filepath.EvalSymlinks(path)
+	//TODO: move wd out of function to initialize once
+	errmsg := "unsafe or invalid path specified"
+	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Println("Error " + err.Error())
-		return path, errors.New("unsafe or invalid path specified")
+		logger.Error("Error getting working directory: ", zap.String("error", err.Error()))
+		return path, errors.New(errmsg)
+	}
+	trustedRoot := wd + "/web"
+	logger.Debug("Trusted root directory: " + trustedRoot)
+
+	logger.Debug("Verifying path " + path)
+	p, err := filepath.EvalSymlinks(trustedRoot + path)
+	if err != nil {
+		logger.Error("Error evaluating path: ", zap.String("error", err.Error()))
+		return path, errors.New(errmsg)
 	}
 
+	logger.Debug("Evaluated path " + p)
 	err = inTrustedRoot(p, trustedRoot)
 	if err != nil {
-		fmt.Println("Error " + err.Error())
-		return p, errors.New("unsafe or invalid path specified")
+		logger.Error("Path is outside of trusted root: ", zap.String("path", p))
+		return p, errors.New(errmsg)
 	} else {
 		return p, nil
 	}
 }
 
+// inTrustedRoot checks if a given path is within the trusted root directory.
+// It iteratively goes up the directory tree until it reaches the root directory ("/")
+// or the trusted root directory. If the path is within the trusted root directory,
+// it returns nil. Otherwise, it returns an error indicating that the path is outside
+// of the trusted root.
 func inTrustedRoot(path string, trustedRoot string) error {
 	for path != "/" {
 		path = filepath.Dir(path)
@@ -443,7 +516,7 @@ func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *ht
 	w.Header().Set(CONTENTTYPE, APPLICATIONJSON)
 	err := json.NewEncoder(w).Encode(alerts)
 	if err != nil {
-		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
+		logger.Error("error encoding alerts: ", zap.String("error", err.Error()))
 		http.Error(w, "error encoding alerts", http.StatusInternalServerError)
 	}
 }
@@ -455,7 +528,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	//Parse the templates in web/templates/
 	tmpl, err := template.ParseFiles("web/templates/alertStore.html.templ")
 	if err != nil {
-		log.Error("error parsing templates: ", zap.String("error", err.Error()))
+		logger.Error("error parsing templates: ", zap.String("error", err.Error()))
 		http.Error(w, "error parsing templates", http.StatusInternalServerError)
 	}
 
@@ -474,22 +547,22 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	//Execute the templates
 	err = tmpl.Execute(w, s)
 	if err != nil {
-		log.Error("error executing templates: ", zap.String("error", err.Error()))
+		logger.Error("error executing templates: ", zap.String("error", err.Error()))
 		http.Error(w, "error executing templates", http.StatusInternalServerError)
 	}
 }
 
-// function which gets alerts from the alert-store
+// function which gets alerts from the alertStore
 func getAlerts(query string) []Alert {
-	resp, err := http.Get("http://localhost:8080/alert-store?q=" + query)
+	resp, err := http.Get("http://localhost:8080/alertStore?q=" + query)
 	if err != nil {
-		log.Error("error getting alerts: ", zap.String("error", err.Error()))
+		logger.Error("error getting alerts: ", zap.String("error", err.Error()))
 	}
 	defer resp.Body.Close()
 	var alerts []Alert
 	err = json.NewDecoder(resp.Body).Decode(&alerts)
 	if err != nil {
-		log.Error("error decoding alerts: ", zap.String("error", err.Error()))
+		logger.Error("error decoding alerts: ", zap.String("error", err.Error()))
 	}
 	return alerts
 }
