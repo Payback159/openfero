@@ -30,3 +30,4 @@
 .DS_STORE
 
 dist/
+.vscode/
