@@ -75,8 +75,25 @@ esac
 # create a new tag
 new_tag="v$new_version"
 
-# push the new tag
-git tag "$new_tag"
+# if local only check if the tag exists
+# if exists check if the tag exists remote
+# if not you can replace the tag with the new one
+if [ "$2" == "local" ]; then
+  # check if the tag exists
+  if git rev-parse "$new_tag" >/dev/null 2>&1; then
+    # check if the tag exists remote
+    if git ls-remote --tags origin "$new_tag" >/dev/null 2>&1; then
+        echo "Tag $new_tag already exists. Please delete the tag before creating a new one."
+        exit 1
+    else
+        # delete the tag
+        git tag -d "$new_tag"
+        git tag "$new_tag"
+    fi
+  else
+    git tag "$new_tag"
+  fi
+fi
 
 # if release check local semvers tags with remote tags and only push the biggest one
 if [ "$2" == "release" ]; then
