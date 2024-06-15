@@ -9,46 +9,46 @@
 
 # check if there is an argument
 if [ -z "$1" ]; then
-  echo "Please provide the type of version to increment: major, minor, or patch"
-  exit 1
+	echo "Please provide the type of version to increment: major, minor, or patch"
+	exit 1
 fi
 
 # check if there is a second argument
 if [ -z "$2" ]; then
-  echo "Please provide if it should release or only local version"
-  exit 1
+	echo "Please provide if it should release or only local version"
+	exit 1
 fi
 
 # check if the argument is valid
 if [ "$1" != "major" ] && [ "$1" != "minor" ] && [ "$1" != "patch" ]; then
-  echo "Invalid argument: $1"
-  echo "Please provide the type of version to increment: major, minor, or patch"
-  exit 1
+	echo "Invalid argument: $1"
+	echo "Please provide the type of version to increment: major, minor, or patch"
+	exit 1
 fi
 
 # check if the second argument is valid
 if [ "$2" != "release" ] && [ "$2" != "local" ]; then
-  echo "Invalid argument: $2"
-  echo "Please provide if it should release or only local version"
-  exit 1
+	echo "Invalid argument: $2"
+	echo "Please provide if it should release or only local version"
+	exit 1
 fi
 
 # check if there are uncommitted changes if it should release
 if [ "$2" == "release" ] && [ -n "$(git status --porcelain)" ]; then
-  echo "There are uncommitted changes. Please commit or stash them before creating a new release."
-  exit 1
+	echo "There are uncommitted changes. Please commit or stash them before creating a new release."
+	exit 1
 fi
 
 # check if the current branch is up to date with the remote if it should release
-if [ "$2" == "release" ] && [ -n "$(git rev-list origin/$(git rev-parse --abbrev-ref HEAD)..HEAD)" ]; then
-  echo "The current branch is not up to date with the remote. Please push the changes before creating a new release."
-  exit 1
+if [ "$2" == "release" ] && [ -n "$(git rev-list origin/"$(git rev-parse --abbrev-ref HEAD)"..HEAD)" ]; then
+	echo "The current branch is not up to date with the remote. Please push the changes before creating a new release."
+	exit 1
 fi
 
 # check if the current branch is main, if it should release
 if [ "$2" == "release" ] && [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
-  echo "You can only create a new release from the main branch."
-  exit 1
+	echo "You can only create a new release from the main branch."
+	exit 1
 fi
 
 # get the latest tag
@@ -59,17 +59,17 @@ latest_version=$(echo "$latest_tag" | cut -c 2-)
 
 # increment the version based on the argument
 case $1 in
-  major)
-    # increment the major version and set minor and patch versions to 0
-    new_version=$(echo "$latest_version" | awk -F. -v OFS=. '{$1++; $2=0; $3=0; print}')
-    ;;
-  minor)
-    # increment the minor version and set patch version to 0
-    new_version=$(echo "$latest_version" | awk -F. -v OFS=. '{$2++; $3=0; print}')
-    ;;
-  patch)
-    new_version=$(echo "$latest_version" | awk -F. -v OFS=. '{$3++; print}')
-    ;;
+major)
+	# increment the major version and set minor and patch versions to 0
+	new_version=$(echo "$latest_version" | awk -F. -v OFS=. '{$1++; $2=0; $3=0; print}')
+	;;
+minor)
+	# increment the minor version and set patch version to 0
+	new_version=$(echo "$latest_version" | awk -F. -v OFS=. '{$2++; $3=0; print}')
+	;;
+patch)
+	new_version=$(echo "$latest_version" | awk -F. -v OFS=. '{$3++; print}')
+	;;
 esac
 
 # create a new tag
@@ -79,38 +79,38 @@ new_tag="v$new_version"
 # if exists check if the tag exists remote
 # if not you can replace the tag with the new one
 if [ "$2" == "local" ]; then
-  # check if the tag exists
-  if git rev-parse "$new_tag" >/dev/null 2>&1; then
-    # check if the tag exists remote
-    if git ls-remote --tags origin "$new_tag" >/dev/null 2>&1; then
-        echo "Tag $new_tag already exists. Please delete the tag before creating a new one."
-        exit 1
-    else
-        # delete the tag
-        git tag -d "$new_tag"
-        git tag "$new_tag"
-    fi
-  else
-    git tag "$new_tag"
-  fi
+	# check if the tag exists
+	if git rev-parse "$new_tag" >/dev/null 2>&1; then
+		# check if the tag exists remote
+		if git ls-remote --tags origin "$new_tag" >/dev/null 2>&1; then
+			echo "Tag $new_tag already exists. Please delete the tag before creating a new one."
+			exit 1
+		else
+			# delete the tag
+			git tag -d "$new_tag"
+			git tag "$new_tag"
+		fi
+	else
+		git tag "$new_tag"
+	fi
 fi
 
 # if release check local semvers tags with remote tags and only push the biggest one
 if [ "$2" == "release" ]; then
-  # get the latest tag from the remote
-  latest_remote_tag=$(git ls-remote --tags origin | awk -F/ '{print $3}' | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n1)
+	# get the latest tag from the remote
+	latest_remote_tag=$(git ls-remote --tags origin | awk -F/ '{print $3}' | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n1)
 
-  # compare the latest tag with the new tag
-  if [ "$latest_tag" != "$latest_remote_tag" ]; then
-    # push the new tag to the remote
-    # git push origin "$new_tag"
-    echo "push new tag" "$new_tag"
-  fi
+	# compare the latest tag with the new tag
+	if [ "$latest_tag" != "$latest_remote_tag" ]; then
+		# push the new tag to the remote
+		# git push origin "$new_tag"
+		echo "push new tag" "$new_tag"
+	fi
 fi
 
 # push the new tag to the remote, if it should release
 if [ "$2" == "release" ]; then
-  git push origin "$new_tag"
+	git push origin "$new_tag"
 fi
 
 # print the new tag

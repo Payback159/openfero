@@ -18,25 +18,25 @@ LIMA_INSTALLED=false
 trap cleanup EXIT
 
 cleanup() {
-    # Removes the goreleaser build
-    rm -rf "${GITROOT}/dist"
-    rm -f "${GITROOT}/openfero"
+	# Removes the goreleaser build
+	rm -rf "${GITROOT}/dist"
+	rm -f "${GITROOT}/openfero"
 }
 
 copy_binary() {
-    # Copies the binary to the project root directory
-    cp "${GITROOT}/dist/openfero_${OS_ARCH}/openfero" "${GITROOT}/"
+	# Copies the binary to the project root directory
+	cp "${GITROOT}/dist/openfero_${OS_ARCH}/openfero" "${GITROOT}/"
 }
 
 if [ "$(uname)" == "Darwin" ]; then
-    if ! command -v docker &> /dev/null; then
-        if ! command -v lima &> /dev/null; then
-            echo "Please install Docker Desktop or Lima"
-            exit 1
-        else
-            LIMA_INSTALLED=true
-        fi
-    fi
+	if ! command -v docker &>/dev/null; then
+		if ! command -v lima &>/dev/null; then
+			echo "Please install Docker Desktop or Lima"
+			exit 1
+		else
+			LIMA_INSTALLED=true
+		fi
+	fi
 fi
 
 # make a local release by incrementing the version
@@ -47,10 +47,10 @@ goreleaser build --snapshot --clean
 
 # when lima is installed set OS_ARCH not to darwin set it to linux
 if [ "$LIMA_INSTALLED" == "true" ]; then
-  OS_ARCH=linux_$(go env GOARCH)
-  copy_binary
-  lima nerdctl build -f goreleaser.dockerfile -t openfero:latest "${GITROOT}/"
+	OS_ARCH=linux_$(go env GOARCH)
+	copy_binary
+	lima nerdctl build -f goreleaser.dockerfile -t openfero:latest "${GITROOT}/"
 else
-  copy_binary
-  docker build -f goreleaser.dockerfile -t openfero:latest "${GITROOT}/"
+	copy_binary
+	docker build -f goreleaser.dockerfile -t openfero:latest "${GITROOT}/"
 fi
