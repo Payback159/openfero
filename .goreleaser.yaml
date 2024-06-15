@@ -6,7 +6,7 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 
-version: 1
+version: 2
 
 before:
   hooks:
@@ -69,8 +69,8 @@ dockers:
 docker_manifests:
   - name_template: "ghcr.io/payback159/openfero:v{{ .Version }}"
     image_templates:
-    - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
-    - "ghcr.io/payback159/openfero:v{{ .Version }}-arm64"
+      - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
+      - "ghcr.io/payback159/openfero:v{{ .Version }}-arm64"
   - name_template: "ghcr.io/payback159/openfero:latest"
     image_templates:
       - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
