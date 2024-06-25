@@ -6,6 +6,10 @@ changelog:
       exclude:
         labels:
           - dependencies
+          - github_actions
     - title: 👒 Dependencies
       labels:
         - dependencies
+    - title: 🏧 Github Actions
+      labels:
+        - github_actions
