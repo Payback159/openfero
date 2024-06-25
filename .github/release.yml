@@ -12,6 +12,7 @@ changelog:
     - title: 👒 Dependencies
       labels:
         - dependencies
-    - title: 🏧 Github Actions
+    - title: 🏧 CI
       labels:
         - github_actions
+        - automation
