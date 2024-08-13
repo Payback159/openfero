@@ -4,11 +4,12 @@ changelog:
   categories:
     - title: 🏕 Features
       labels:
-        - '*'
-      exclude:
-        labels:
-          - dependencies
-          - github_actions
+        - feature
+        - enhancement
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - fix
     - title: 👒 Dependencies
       labels:
         - dependencies
@@ -16,3 +17,6 @@ changelog:
       labels:
         - github_actions
         - automation
+    - title: Misc
+      labels:
+        - "*"
