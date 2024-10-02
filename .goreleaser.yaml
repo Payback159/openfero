@@ -26,6 +26,9 @@ builds:
       - amd64
       - arm64
 
+release:
+  target_commitish: "{{ .Commit }}"
+
 archives:
   - format: tar.gz
     # this name template makes the OS and Arch compatible with the results of `uname`.
