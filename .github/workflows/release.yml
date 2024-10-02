@@ -5,14 +5,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'New tag'
+        description: "New tag"
         required: true
 
 env:
-    # Use docker.io for Docker Hub if empty
-    REGISTRY: ghcr.io
-    # github.repository as <account>/<repo>
-    IMAGE_NAME: ${{ github.repository }}
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
 
 permissions:
   contents: write
