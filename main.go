@@ -458,46 +458,42 @@ func assetsHandler(w http.ResponseWriter, r *http.Request) {
 // If the path is unsafe or invalid, it returns an error.
 // Otherwise, it returns the evaluated path.
 func verifyPath(path string) (string, error) {
-	//TODO: move wd out of function to initialize once
 	errmsg := "unsafe or invalid path specified"
 	wd, err := os.Getwd()
 	if err != nil {
 		logger.Error("Error getting working directory: ", zap.String("error", err.Error()))
 		return path, errors.New(errmsg)
 	}
-	trustedRoot := wd + "/web"
+	trustedRoot := filepath.Join(wd, "web")
 	logger.Debug("Trusted root directory: " + trustedRoot)
 
-	logger.Debug("Verifying path " + path)
-	p, err := filepath.EvalSymlinks(trustedRoot + path)
+	// Clean the path to remove any .. or . elements
+	cleanPath := filepath.Clean(path)
+	if strings.HasPrefix(cleanPath, "..") {
+		return "", errors.New(errmsg)
+	}
+
+	// Join the trusted root and the cleaned path
+	fullPath := filepath.Join(trustedRoot, cleanPath)
+	logger.Debug("Verifying path " + fullPath)
+
+	// Evaluate symbolic links
+	p, err := filepath.EvalSymlinks(fullPath)
 	if err != nil {
 		logger.Error("Error evaluating path: ", zap.String("error", err.Error()))
-		return path, errors.New(errmsg)
+		return "", errors.New(errmsg)
 	}
 
 	logger.Debug("Evaluated path " + p)
-	err = inTrustedRoot(p, trustedRoot)
-	if err != nil {
-		logger.Error("Path is outside of trusted root: ", zap.String("path", p))
-		return p, errors.New(errmsg)
-	} else {
-		return p, nil
-	}
-}
 
-// inTrustedRoot checks if a given path is within the trusted root directory.
-// It iteratively goes up the directory tree until it reaches the root directory ("/")
-// or the trusted root directory. If the path is within the trusted root directory,
-// it returns nil. Otherwise, it returns an error indicating that the path is outside
-// of the trusted root.
-func inTrustedRoot(path string, trustedRoot string) error {
-	for path != "/" {
-		path = filepath.Dir(path)
-		if path == trustedRoot {
-			return nil
-		}
+	// Check if the evaluated path is within the trusted root directory
+	rel, err := filepath.Rel(trustedRoot, p)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		logger.Error("Path is outside of trusted root: ", zap.String("path", p))
+		return "", errors.New(errmsg)
 	}
-	return errors.New("path is outside of trusted root")
+
+	return p, nil
 }
 
 // function which provides alerts array to the getHandler
