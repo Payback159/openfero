@@ -1,0 +1,18 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    description: "Allow reading job-definitions configMap"
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  name: {{ include "openfero.fullname" . }}-job-definitions-viewers
+  labels:
+    {{ include "openfero.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "openfero.fullname" . }}-read-jobs-configmap
+subjects:
+- kind: ServiceAccount
+  name: {{ include "openfero.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
