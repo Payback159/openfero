@@ -1,16 +1,16 @@
----
+# Source: openfero/templates/rolebinding-create-job.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   annotations:
     description: "Allow job creation"
     rbac.authorization.kubernetes.io/autoupdate: "true"
-  name: {{ include "openfero.fullname" . }}-create-jobs
+  name: openfero-create-jobs
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "openfero.fullname" . }}-create-jobs
+  name: openfero-create-jobs
 subjects:
   - kind: ServiceAccount
-    name: {{ include "openfero.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    name: openfero
+    namespace: openfero
