@@ -1,0 +1,25 @@
+# Source: openfero/templates/role-create-job.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    description: "Allow job creation"
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  name: openfero-create-jobs
+  labels:
+    helm.sh/chart: openfero-0.1.0
+    app.kubernetes.io/name: openfero
+    app.kubernetes.io/instance: openfero
+    app.kubernetes.io/version: "0.7.1"
+    app.kubernetes.io/managed-by: Helm
+  namespace: openfero
+rules:
+  - resources:
+    - jobs
+    apiGroups:
+    - batch
+    verbs:
+    - create
+    - get
+    - list
+    - delete

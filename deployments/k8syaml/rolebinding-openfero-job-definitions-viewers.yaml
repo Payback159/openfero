@@ -1,24 +1,4 @@
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  annotations:
-    description: "Allow reading job-definitions configMap"
-    rbac.authorization.kubernetes.io/autoupdate: "true"
-  name: openfero-read-jobs-configmap
-  labels:
-    name: "openfero"
-    namespace: openfero
-rules:
-  - resources:
-    - configmaps
-    apiGroups: [""]
-    verbs:
-    - get
-    - list
-
----
-
+# Source: openfero/templates/rolebinding-read-jobs.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -26,6 +6,13 @@ metadata:
     description: "Allow reading job-definitions configMap"
     rbac.authorization.kubernetes.io/autoupdate: "true"
   name: openfero-job-definitions-viewers
+  labels:
+    
+    helm.sh/chart: openfero-0.1.0
+    app.kubernetes.io/name: openfero
+    app.kubernetes.io/instance: openfero
+    app.kubernetes.io/version: "0.7.1"
+    app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

@@ -5,7 +5,7 @@ metadata:
   annotations:
     description: "Allow reading job-definitions configMap"
     rbac.authorization.kubernetes.io/autoupdate: "true"
-  name: {{ .Values.name }}-read-jobs-configmap
+  name: {{ include "openfero.fullname" . }}-read-jobs-configmap
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "openfero.labels" . | nindent 4 }}
