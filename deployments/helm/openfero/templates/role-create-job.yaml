@@ -6,6 +6,7 @@ metadata:
     description: "Allow job creation"
     rbac.authorization.kubernetes.io/autoupdate: "true"
   name: {{ include "openfero.fullname" . }}-create-jobs
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "openfero.labels" . | nindent 4 }}
   namespace: {{ .Release.Namespace }}

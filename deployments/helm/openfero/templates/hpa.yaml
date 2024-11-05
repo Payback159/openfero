@@ -3,6 +3,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {{ include "openfero.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "openfero.labels" . | nindent 4 }}
 spec:
