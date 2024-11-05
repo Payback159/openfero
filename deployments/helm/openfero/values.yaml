@@ -28,7 +28,7 @@ securityContext:
     drop:
       - ALL
   readOnlyRootFilesystem: true
-  runAsNonRoot: true
+  runAsNonRoot: false
 service:
   type: ClusterIP
   port: 8080
