@@ -57,3 +57,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
           # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+
+      - name: Bump appVersion in Helm Chart
+        run: |
+          sed -i "s/appVersion: \".*\"/appVersion: \"${{ github.event.inputs.tag }}\"/" deployments/helm/openfero/Chart.yaml
+          git add deployments/helm/openfero/Chart.yaml
+          git commit -m "Bump appVersion to ${{ github.event.inputs.tag }}"
+          git push
