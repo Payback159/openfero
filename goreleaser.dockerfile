@@ -13,6 +13,6 @@ COPY openfero /app/
 COPY web/ /app/web/
 COPY --from=build-env /etc/passwd_single /etc/passwd
 COPY --from=build-env /etc/group_single /etc/group
-USER openfero
+USER 10001
 
 CMD ["/app/openfero"]
