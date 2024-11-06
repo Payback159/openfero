@@ -29,7 +29,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
 
 const CONTENTTYPE = "Content-Type"
@@ -68,13 +67,6 @@ var alertStore []Alert
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
-
-	if *kubeconfig == "" {
-		if home := homedir.HomeDir(); home != "" {
-			kubeconfigPath := filepath.Join(home, ".kube", "config")
-			kubeconfig = &kubeconfigPath
-		}
-	}
 
 	//use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
