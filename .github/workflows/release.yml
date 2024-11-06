@@ -8,6 +8,9 @@ on:
         description: "New tag"
         required: true
 
+permissions:
+  contents: read
+
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
