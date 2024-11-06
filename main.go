@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime/metrics"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Payback159/openfero/pkg/logger"
@@ -68,27 +67,19 @@ var alertStore []Alert
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
-func initKubeClient() *kubernetes.Clientset {
-	var kubeconfig *string
+func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
 
-	// prepare kubernetes client with in cluster configuration
-	var config *rest.Config
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-		logger.Debug("Using out of cluster configuration")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-		logger.Debug("Using in cluster configuration")
+	if *kubeconfig == "" {
+		if home := homedir.HomeDir(); home != "" {
+			kubeconfigPath := filepath.Join(home, ".kube", "config")
+			kubeconfig = &kubeconfigPath
+		}
 	}
-	flag.Parse()
 
 	//use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			logger.Fatal("Could not read k8s cluster configuration: %s", zap.String("error", err.Error()))
-		}
+		logger.Fatal("Could not read k8s configuration: %s", zap.String("error", err.Error()))
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
@@ -104,6 +95,9 @@ func main() {
 	// Parse command line arguments
 	addr := flag.String("addr", ":8080", "address to listen for webhook")
 	logLevel := flag.String("logLevel", "info", "log level")
+	kubeconfig := flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	configmapNamespace := flag.String("configmapNamespace", "", "Kubernetes namespace where jobs are defined")
+	jobDestinationNamespace := flag.String("jobDestinationNamespace", "", "Kubernetes namespace where jobs will be created")
 
 	flag.Parse()
 
@@ -124,7 +118,7 @@ func main() {
 	}
 
 	// Use the in-cluster config to create a kubernetes client
-	clientset := initKubeClient()
+	clientset := initKubeClient(kubeconfig)
 	defaultNamespaceLocation := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	currentNamespace := ""
 
@@ -150,8 +144,13 @@ func main() {
 		currentNamespace = string(namespaceDat)
 	}
 
-	configmapNamespace := flag.String("configmapNamespace", currentNamespace, "Kubernetes namespace where jobs are defined")
-	jobDestinationNamespace := flag.String("jobDestinationNamespace", currentNamespace, "Kubernetes namespace where jobs will be created")
+	if *configmapNamespace == "" {
+		configmapNamespace = &currentNamespace
+	}
+
+	if *jobDestinationNamespace == "" {
+		jobDestinationNamespace = &currentNamespace
+	}
 
 	server := &clientsetStruct{
 		clientset:               *clientset,
@@ -290,17 +289,14 @@ func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter,
 
 	status := sanitizeInput(message.Status)
 	alertcount := len(message.Alerts)
-	var waitgroup sync.WaitGroup
-	waitgroup.Add(alertcount)
 
 	logger.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
 	if status == "resolved" || status == "firing" {
 		logger.Info("Create ResponseJobs")
 		for _, alert := range message.Alerts {
-			go server.createResponseJob(&waitgroup, alert, status, httpwriter)
+			go server.createResponseJob(alert, status, httpwriter)
 		}
-		waitgroup.Wait()
 	} else {
 		logger.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
 		return
@@ -314,8 +310,7 @@ func sanitizeInput(input string) string {
 	return input
 }
 
-func (server *clientsetStruct) createResponseJob(waitgroup *sync.WaitGroup, alert Alert, status string, httpwriter http.ResponseWriter) {
-	defer waitgroup.Done()
+func (server *clientsetStruct) createResponseJob(alert Alert, status string, httpwriter http.ResponseWriter) {
 	server.saveAlert(alert)
 	alertname := sanitizeInput(alert.Labels["alertname"])
 	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
