@@ -42,7 +42,7 @@ archives:
 
 dockers:
   - image_templates:
-      - ghcr.io/payback159/openfero:v{{ .Version }}-amd64
+      - ghcr.io/payback159/openfero:{{ .Version }}-amd64
     dockerfile: goreleaser.dockerfile
     use: buildx
     goarch: amd64
@@ -56,7 +56,7 @@ dockers:
     extra_files:
       - web/
   - image_templates:
-      - ghcr.io/payback159/openfero:v{{ .Version }}-arm64
+      - ghcr.io/payback159/openfero:{{ .Version }}-arm64
     dockerfile: goreleaser.dockerfile
     use: buildx
     goarch: arm64
@@ -70,14 +70,14 @@ dockers:
     extra_files:
       - web/
 docker_manifests:
-  - name_template: "ghcr.io/payback159/openfero:v{{ .Version }}"
+  - name_template: "ghcr.io/payback159/openfero:{{ .Version }}"
     image_templates:
-      - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
-      - "ghcr.io/payback159/openfero:v{{ .Version }}-arm64"
+      - "ghcr.io/payback159/openfero:{{ .Version }}-amd64"
+      - "ghcr.io/payback159/openfero:{{ .Version }}-arm64"
   - name_template: "ghcr.io/payback159/openfero:latest"
     image_templates:
-      - "ghcr.io/payback159/openfero:v{{ .Version }}-amd64"
-      - "ghcr.io/payback159/openfero:v{{ .Version }}-arm64"
+      - "ghcr.io/payback159/openfero:{{ .Version }}-amd64"
+      - "ghcr.io/payback159/openfero:{{ .Version }}-arm64"
 
 changelog:
   sort: asc
