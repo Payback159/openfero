@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime/metrics"
 	"strings"
+	"time"
 
 	"github.com/Payback159/openfero/pkg/logger"
 	"github.com/Payback159/openfero/pkg/metadata"
@@ -161,8 +162,14 @@ func main() {
 	http.HandleFunc("GET /ui", uiHandler)
 	http.HandleFunc("GET /assets/", assetsHandler)
 
+	srv := &http.Server{
+		Addr:         *addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
 	logger.Info("Starting server on " + *addr)
-	if err := http.ListenAndServe(*addr, nil); err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		logger.Fatal("error starting server: ", zap.String("error", err.Error()))
 	}
 }
