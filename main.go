@@ -89,6 +89,8 @@ func main() {
 	kubeconfig := flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	configmapNamespace := flag.String("configmapNamespace", "", "Kubernetes namespace where jobs are defined")
 	jobDestinationNamespace := flag.String("jobDestinationNamespace", "", "Kubernetes namespace where jobs will be created")
+	readTimeout := flag.Int("readTimeout", 5, "read timeout in seconds")
+	writeTimeout := flag.Int("writeTimeout", 10, "write timeout in seconds")
 
 	flag.Parse()
 
@@ -164,8 +166,8 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *addr,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  time.Duration(*readTimeout) * time.Second,
+		WriteTimeout: time.Duration(*writeTimeout) * time.Second,
 	}
 
 	logger.Info("Starting server on " + *addr)
