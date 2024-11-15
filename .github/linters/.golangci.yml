@@ -6,3 +6,5 @@ linters-settings:
   govet:
     enable:
       - shadow # enable the shadow check
+run:
+  timeout: 5m

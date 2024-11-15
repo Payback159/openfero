@@ -32,7 +32,6 @@ data:
             restartPolicy: Never
 
 ---
-
 apiVersion: v1
 kind: ConfigMap
 metadata:

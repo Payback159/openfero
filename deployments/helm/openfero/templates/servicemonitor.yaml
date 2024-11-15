@@ -1,0 +1,18 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    {{- include "openfero.labels" . | nindent 4 }}
+  name: {{ include "openfero.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  endpoints:
+  - port: http
+    scheme: http
+    path: /metrics
+  jobLabel: jobLabel
+  selector:
+    matchLabels:
+        {{- include "openfero.selectorLabels" . | nindent 8 }}
+{{- end }}
