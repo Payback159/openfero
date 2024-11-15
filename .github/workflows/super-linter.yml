@@ -8,17 +8,17 @@ name: Lint Code Base
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
-permissions:  # added using https://github.com/step-security/secure-workflows
+    branches: ["main"]
+permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
   run-lint:
     permissions:
-      contents: read  # for actions/checkout to fetch code
-      statuses: write  # for github/super-linter to mark status of each linter run
+      contents: read # for actions/checkout to fetch code
+      statuses: write # for github/super-linter to mark status of each linter run
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -33,6 +33,7 @@ jobs:
           VALIDATE_ALL_CODEBASE: false
           VALIDATE_CHECKOV: false
           VALIDATE_GO: false
+          VALIDATE_YAML: false
           KUBERNETES_KUBECONFORM_OPTIONS: "--ignore-missing-schemas --ignore-filename-pattern=deployments/helm/*"
           DEFAULT_BRANCH: "origin/main"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

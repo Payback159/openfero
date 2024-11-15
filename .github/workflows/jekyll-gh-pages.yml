@@ -10,7 +10,6 @@ on:
       - "_config.yml"
       - "docs/**"
 
-
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
