@@ -33,6 +33,9 @@ service:
   type: ClusterIP
   port: 8080
 
+serviceMonitor:
+  enabled: true
+
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
