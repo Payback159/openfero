@@ -33,6 +33,10 @@ jobs:
           VALIDATE_ALL_CODEBASE: false
           VALIDATE_CHECKOV: false
           VALIDATE_GO: false
+          FIX_YAML_PRETTIER: true
+          FIX_MARKDOWN: true
+          FIX_SHELL_SHFMT: true
+          FIX_CSS: true
           KUBERNETES_KUBECONFORM_OPTIONS: "--ignore-missing-schemas --ignore-filename-pattern=deployments/helm/*"
           DEFAULT_BRANCH: "origin/main"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
