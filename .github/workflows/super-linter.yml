@@ -8,17 +8,17 @@ name: Lint Code Base
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
-permissions:  # added using https://github.com/step-security/secure-workflows
+    branches: ["main"]
+permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
   run-lint:
     permissions:
-      contents: read  # for actions/checkout to fetch code
-      statuses: write  # for github/super-linter to mark status of each linter run
+      contents: read # for actions/checkout to fetch code
+      statuses: write # for github/super-linter to mark status of each linter run
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
