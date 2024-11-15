@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime/metrics"
 	"strings"
-	"time"
 
 	"github.com/Payback159/openfero/pkg/logger"
 	"github.com/Payback159/openfero/pkg/metadata"
@@ -35,7 +34,6 @@ const contentType = "Content-Type"
 const applicationJSON = "application/json"
 
 type (
-	timestamp   time.Time
 	hookMessage struct {
 		Version           string            `json:"version"`
 		GroupKey          string            `json:"groupKey"`
