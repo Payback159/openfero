@@ -1,7 +1,0 @@
-main:
-  - title: "Home"
-    url: /index.html
-  - title: "Installation Recommendations"
-    url: /docs/installation-recommendations/
-  - title: "Operarios"
-    url: /operarios/
