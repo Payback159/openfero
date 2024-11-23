@@ -2,24 +2,21 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"html/template"
-	"math/big"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime/metrics"
 	"strings"
 	"time"
 
-	"github.com/Payback159/openfero/pkg/logger"
+	log "github.com/Payback159/openfero/pkg/logging"
 	"github.com/Payback159/openfero/pkg/metadata"
 	"github.com/ghodss/yaml"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
@@ -70,12 +67,12 @@ func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
 	//use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		logger.Fatal("Could not read k8s configuration: %s", zap.String("error", err.Error()))
+		log.Fatal("Could not read k8s configuration: %s", zap.String("error", err.Error()))
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		logger.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
+		log.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
 	}
 
 	return clientset
@@ -91,10 +88,14 @@ func main() {
 	jobDestinationNamespace := flag.String("jobDestinationNamespace", "", "Kubernetes namespace where jobs will be created")
 	readTimeout := flag.Int("readTimeout", 5, "read timeout in seconds")
 	writeTimeout := flag.Int("writeTimeout", 10, "write timeout in seconds")
+	alertStoreSize := flag.Int("alertStoreSize", 10, "size of the alert store")
 
 	flag.Parse()
 
-	// configure logger
+	// Set the alert store size
+	alertStore = make([]alert, 0, *alertStoreSize)
+
+	// configure log
 	var cfg zap.Config
 	switch strings.ToLower(*logLevel) {
 	case "debug":
@@ -102,12 +103,12 @@ func main() {
 	case "info":
 		cfg = zap.NewProductionConfig()
 	default:
-		logger.Fatal("Invalid log level specified")
+		log.Fatal("Invalid log level specified")
 	}
 
 	// activate json logging
-	if logger.SetConfig(cfg) != nil {
-		logger.Fatal("Could not set logger configuration")
+	if log.SetConfig(cfg) != nil {
+		log.Fatal("Could not set log configuration")
 	}
 
 	// Use the in-cluster config to create a kubernetes client
@@ -118,21 +119,21 @@ func main() {
 	//Check if running in-cluster or out-of-cluster
 	_, err := rest.InClusterConfig()
 	if err != nil {
-		logger.Debug("Using out of cluster configuration")
+		log.Debug("Using out of cluster configuration")
 		// Extract the current namespace from the client config
 		currentNamespace, _, err = clientcmd.DefaultClientConfig.Namespace()
 		if err != nil {
-			logger.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
 		}
 	} else {
-		logger.Debug("Using in cluster configuration")
+		log.Debug("Using in cluster configuration")
 		// Extract the current namespace from the mounted secrets
 		if _, err := os.Stat(defaultNamespaceLocation); os.IsNotExist(err) {
-			logger.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
+			log.Fatal("Current kubernetes namespace could not be found", zap.String("error", err.Error()))
 		}
 		namespaceDat, err := os.ReadFile(defaultNamespaceLocation)
 		if err != nil {
-			logger.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
+			log.Fatal("Couldn't read from "+defaultNamespaceLocation, zap.String("error", err.Error()))
 		}
 		currentNamespace = string(namespaceDat)
 	}
@@ -152,10 +153,10 @@ func main() {
 	}
 
 	//register metrics and set prometheus handler
-	addMetricsToPrometheusRegistry()
+	metadata.AddMetricsToPrometheusRegistry()
 	http.Handle(metadata.MetricsPath, promhttp.Handler())
 
-	logger.Info("Starting webhook receiver")
+	log.Info("Starting webhook receiver")
 	http.HandleFunc("GET /healthz", server.healthzGetHandler)
 	http.HandleFunc("GET /readiness", server.readinessGetHandler)
 	http.HandleFunc("GET /alertStore", server.alertStoreGetHandler)
@@ -170,73 +171,18 @@ func main() {
 		WriteTimeout: time.Duration(*writeTimeout) * time.Second,
 	}
 
-	logger.Info("Starting server on " + *addr)
+	log.Info("Starting server on " + *addr)
 	if err := srv.ListenAndServe(); err != nil {
-		logger.Fatal("error starting server: ", zap.String("error", err.Error()))
+		log.Fatal("error starting server: ", zap.String("error", err.Error()))
 	}
 }
 
-// function which registers metrics to the prometheus registry
-func addMetricsToPrometheusRegistry() {
-	// Get descriptions for all supported metrics.
-	metricsMeta := metrics.All()
-	// Register metrics and retrieve the values in prometheus client
-	for i := range metricsMeta {
-		meta := metricsMeta[i]
-		opts := getMetricsOptions(metricsMeta[i])
-		if meta.Cumulative {
-			// Register as a counter
-			funcCounter := prometheus.NewCounterFunc(prometheus.CounterOpts(opts), func() float64 {
-				return metadata.GetSingleMetricFloat(meta.Name)
-			})
-			prometheus.MustRegister(funcCounter)
-		} else {
-			// Register as a gauge
-			funcGauge := prometheus.NewGaugeFunc(prometheus.GaugeOpts(opts), func() float64 {
-				return metadata.GetSingleMetricFloat(meta.Name)
-			})
-			prometheus.MustRegister(funcGauge)
-		}
-	}
-}
-
-// getMetricsOptions function to get prometheus options for a metric
-func getMetricsOptions(metric metrics.Description) prometheus.Opts {
-	tokens := strings.Split(metric.Name, "/")
-	logger.Error("error getting metric options: ", zap.String("error", metric.Name))
-	if len(tokens) < 2 {
-		return prometheus.Opts{}
-	}
-	nameTokens := strings.Split(tokens[len(tokens)-1], ":")
-	// create a unique name for metric, that will be its primary key on the registry
-	validName := normalizePrometheusName(strings.Join(nameTokens[:2], "_"))
-	subsystem := metadata.GetMetricSubsystemName(metric)
-
-	units := nameTokens[1]
-	help := fmt.Sprintf("Units:%s, %s", units, metric.Description)
-	opts := prometheus.Opts{
-		Namespace: tokens[1],
-		Subsystem: subsystem,
-		Name:      validName,
-		Help:      help,
-	}
-	return opts
-}
-
-// normalizePrometheusName function to normalize prometheus name
-func normalizePrometheusName(name string) string {
-	return strings.TrimSpace(strings.ReplaceAll(name, "-", "_"))
-}
-
-// Use crypto/rand to generate a random string of a given length and charset
+// Use math/rand to generate a random string of a given length and charset
 func stringWithCharset(length int, charset string) string {
 	randombytes := make([]byte, length)
 	for i := range randombytes {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			logger.Error("error generating random string: ", zap.String("error", err.Error()))
-		}
-		randombytes[i] = charset[num.Int64()]
+		num := rand.Intn(len(charset))
+		randombytes[i] = charset[num]
 	}
 
 	return string(randombytes)
@@ -252,8 +198,8 @@ func (server *clientsetStruct) healthzGetHandler(w http.ResponseWriter, r *http.
 func (server *clientsetStruct) readinessGetHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		logger.Error("error listing ConfigMaps: ", zap.String("error", err.Error()))
-		http.Error(w, "ConfigMaps could not be listed. Does the ServiceAccount of OpenFero also have the necessary permissions?", http.StatusInternalServerError)
+		log.Error("error listing configmaps: ", zap.String("error", err.Error()))
+		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set(contentType, applicationJSON)
@@ -268,8 +214,8 @@ func (server *clientsetStruct) alertsGetHandler(httpwriter http.ResponseWriter, 
 	httpwriter.WriteHeader(http.StatusOK)
 
 	if err := enc.Encode("OK"); err != nil {
-		logger.Error("error encoding messages: ", zap.String("error", err.Error()))
-		http.Error(httpwriter, "error encoding messages", http.StatusInternalServerError)
+		log.Error("error encoding messages: ", zap.String("error", err.Error()))
+		http.Error(httpwriter, "", http.StatusInternalServerError)
 	}
 }
 
@@ -279,9 +225,9 @@ func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter,
 	dec := json.NewDecoder(httprequest.Body)
 	defer httprequest.Body.Close()
 
-	var message hookMessage
+	message := hookMessage{}
 	if err := dec.Decode(&message); err != nil {
-		logger.Error("error decoding message: ", zap.String("error", err.Error()))
+		log.Error("error decoding message: ", zap.String("error", err.Error()))
 		http.Error(httpwriter, "invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -289,18 +235,23 @@ func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter,
 	status := sanitizeInput(message.Status)
 	alertcount := len(message.Alerts)
 
-	logger.Info(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
+	log.Debug(status + " webhook received with " + fmt.Sprint(alertcount) + " alerts")
 
-	if status == "resolved" || status == "firing" {
-		logger.Info("Create ResponseJobs")
-		for _, alert := range message.Alerts {
-			go server.createResponseJob(alert, status, httpwriter)
-		}
-	} else {
-		logger.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
+	if !checkAlertStatus(status) {
+		log.Warn("Status of alert was neither firing nor resolved, stop creating a response job.")
 		return
 	}
 
+	log.Debug("Creating response job for " + fmt.Sprint(alertcount) + " alerts")
+
+	for _, alert := range message.Alerts {
+		go server.createResponseJob(alert, status, httpwriter)
+	}
+
+}
+
+func checkAlertStatus(status string) bool {
+	return status == "resolved" || status == "firing"
 }
 
 func sanitizeInput(input string) string {
@@ -309,30 +260,30 @@ func sanitizeInput(input string) string {
 	return input
 }
 
-func (server *clientsetStruct) createResponseJob(alert alert, status string, httpwriter http.ResponseWriter) {
+func (server *clientsetStruct) createResponseJob(alert alert, status string, _ http.ResponseWriter) {
 	server.saveAlert(alert)
 	alertname := sanitizeInput(alert.Labels["alertname"])
 	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
-	logger.Info("Try to load configmap " + responsesConfigmap)
+	log.Debug("Try to load configmap " + responsesConfigmap)
 	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
 	if err != nil {
-		logger.Error("error getting configmap: ", zap.String("error", err.Error()))
+		log.Error("error getting configmap: ", zap.String("error", err.Error()))
 		return
 	}
 
 	jobDefinition := configMap.Data[alertname]
-	var yamlJobDefinition []byte
-	if jobDefinition != "" {
-		yamlJobDefinition = []byte(jobDefinition)
-	} else {
-		logger.Error("Could not find a data block with the key " + alertname + " in the configmap.")
+
+	if jobDefinition == "" {
+		log.Error("Could not find a data block with the key " + alertname + " in the configmap.")
 		return
 	}
+	yamlJobDefinition := []byte(jobDefinition)
+
 	// yamlJobDefinition contains a []byte of the yaml job spec
 	// convert the yaml to json so it works with Unmarshal
 	jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
 	if err != nil {
-		logger.Error("error while converting YAML job definition to JSON: ", zap.String("error", err.Error()))
+		log.Error("error while converting YAML job definition to JSON: ", zap.String("error", err.Error()))
 		return
 	}
 	randomstring := stringWithCharset(5, charset)
@@ -340,34 +291,51 @@ func (server *clientsetStruct) createResponseJob(alert alert, status string, htt
 	jobObject := &batchv1.Job{}
 	err = json.Unmarshal(jsonBytes, jobObject)
 	if err != nil {
-		logger.Error("Error while using unmarshal on received job: ", zap.String("error", err.Error()))
+		log.Error("Error while using unmarshal on received job: ", zap.String("error", err.Error()))
 		return
 	}
 
 	// Adding randomString to avoid name conflict
 	jobObject.SetName(jobObject.Name + "-" + randomstring)
-	// Adding Labels as Environment variables
-	logger.Info("Adding Alert-Labels as environment variable to job " + jobObject.Name)
-	for labelkey, labelvalue := range alert.Labels {
-		jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
-	}
+
+	// Adding alert labels to job
+	addLabelsAsEnvVars(jobObject, alert)
 
 	// Adding TTL to job if it is not already set
 	if !checkJobTTL(jobObject) {
 		addJobTTL(jobObject)
 	}
 
+	// Create the job
+	err = server.createRemediationJob(jobObject)
+	if err != nil {
+		log.Error("error creating job: ", zap.String("error", err.Error()))
+		return
+	}
+
+}
+
+func (server *clientsetStruct) createRemediationJob(jobObject *batchv1.Job) error {
 	// Job client for creating the job according to the job definitions extracted from the responses configMap
 	jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
 
 	// Create job
-	logger.Info("Creating job " + jobObject.Name)
-	_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
+	log.Info("Creating job " + jobObject.Name)
+	_, err := jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
 	if err != nil {
-		logger.Error("error creating job: ", zap.String("error", err.Error()))
-		return
+		log.Error("error creating job: ", zap.String("error", err.Error()))
+		return err
 	}
-	logger.Info("Created job " + jobObject.Name)
+	log.Info("Job " + jobObject.Name + " created successfully")
+	return nil
+}
+
+func addLabelsAsEnvVars(jobObject *batchv1.Job, alert alert) {
+	// Adding Labels as Environment variables
+	log.Debug("Adding labels as environment variables")
+	for labelkey, labelvalue := range alert.Labels {
+		jobObject.Spec.Template.Spec.Containers[0].Env = append(jobObject.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "OPENFERO_" + strings.ToUpper(labelkey), Value: labelvalue})
+	}
 }
 
 func checkJobTTL(jobObject *batchv1.Job) bool {
@@ -379,52 +347,79 @@ func addJobTTL(jobObject *batchv1.Job) {
 	jobObject.Spec.TTLSecondsAfterFinished = &ttl
 }
 
-// function which gets an alert from createResponseJob and saves it to the alerts array
-// drops the oldest alert if the array is full
+// function which saves the alert in the alertStore
 func (server *clientsetStruct) saveAlert(alert alert) {
-	alertsArraySize := 10
-	if len(alertStore) >= alertsArraySize {
-		alertStore = alertStore[1:]
+	if len(alertStore) < cap(alertStore) {
+		alertStore = append(alertStore, alert)
+	} else {
+		log.Debug("Alert store is full, dropping oldest alert")
+		copy(alertStore, alertStore[1:])
+		alertStore[len(alertStore)-1] = alert
 	}
-	alertStore = append(alertStore, alert)
 }
 
 // function which filters alerts based on the query
 func filterAlerts(alerts []alert, query string) []alert {
 	var filteredAlerts []alert
+	// Return all alerts if query is empty
+	if query == "" {
+		return alerts
+	}
+
 	for _, alert := range alerts {
-		matches := false
-
-		// Check alertname
-		if strings.Contains(strings.ToLower(alert.Labels["alertname"]), strings.ToLower(query)) {
-			matches = true
-		}
-
-		// Check labels (case-insensitive)
-		for _, value := range alert.Labels {
-			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
-				matches = true
-				break
-			}
-		}
-
-		// Check annotations (case-insensitive)
-		for _, value := range alert.Annotations {
-			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
-				matches = true
-				break
-			}
-		}
-
-		if matches {
+		if alertMatchesQuery(alert, query) {
 			filteredAlerts = append(filteredAlerts, alert)
 		}
 	}
 	return filteredAlerts
 }
 
+func alertMatchesQuery(alert alert, query string) bool {
+	query = strings.ToLower(query)
+	alertname := strings.ToLower(alert.Labels["alertname"])
+
+	// Create a channel to receive match results
+	matchChan := make(chan bool, 3)
+
+	// Check alertname concurrently
+	go func() {
+		matchChan <- strings.Contains(alertname, query)
+	}()
+
+	// Check labels concurrently
+	go func() {
+		for _, value := range alert.Labels {
+			if strings.Contains(strings.ToLower(value), query) {
+				matchChan <- true
+				return
+			}
+		}
+		matchChan <- false
+	}()
+
+	// Check annotations concurrently
+	go func() {
+		for _, value := range alert.Annotations {
+			if strings.Contains(strings.ToLower(value), query) {
+				matchChan <- true
+				return
+			}
+		}
+		matchChan <- false
+	}()
+
+	// Collect results from all goroutines
+	for i := 0; i < 3; i++ {
+		if <-matchChan {
+			return true
+		}
+	}
+
+	return false
+}
+
 func assetsHandler(w http.ResponseWriter, r *http.Request) {
-	logger.Debug("Called asset " + r.URL.Path)
+	log.Debug("Called asset " + r.URL.Path)
 	// set content type based on file extension
 	contentType := ""
 	switch filepath.Ext(r.URL.Path) {
@@ -442,7 +437,7 @@ func assetsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
+	log.Debug("Called asset " + r.URL.Path + " serves Filesystem asset: " + path)
 	// serve assets from the web/assets directory
 	http.ServeFile(w, r, path)
 }
@@ -455,11 +450,11 @@ func verifyPath(path string) (string, error) {
 	errmsg := "unsafe or invalid path specified"
 	wd, err := os.Getwd()
 	if err != nil {
-		logger.Error("Error getting working directory: ", zap.String("error", err.Error()))
+		log.Error("Error getting working directory: ", zap.String("error", err.Error()))
 		return path, errors.New(errmsg)
 	}
 	trustedRoot := filepath.Join(wd, "web")
-	logger.Debug("Trusted root directory: " + trustedRoot)
+	log.Debug("Trusted root directory: " + trustedRoot)
 
 	// Clean the path to remove any .. or . elements
 	cleanPath := filepath.Clean(path)
@@ -469,21 +464,21 @@ func verifyPath(path string) (string, error) {
 
 	// Join the trusted root and the cleaned path
 	fullPath := filepath.Join(trustedRoot, cleanPath)
-	logger.Debug("Verifying path " + fullPath)
+	log.Debug("Verifying path " + fullPath)
 
 	// Evaluate symbolic links
 	p, err := filepath.EvalSymlinks(fullPath)
 	if err != nil {
-		logger.Error("Error evaluating path: ", zap.String("error", err.Error()))
+		log.Error("Error evaluating path: ", zap.String("error", err.Error()))
 		return "", errors.New(errmsg)
 	}
 
-	logger.Debug("Evaluated path " + p)
+	log.Debug("Evaluated path " + p)
 
 	// Check if the evaluated path is within the trusted root directory
 	rel, err := filepath.Rel(trustedRoot, p)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		logger.Error("Path is outside of trusted root: ", zap.String("path", p))
+		log.Error("Path is outside of trusted root: ", zap.String("path", p))
 		return "", errors.New(errmsg)
 	}
 
@@ -492,22 +487,16 @@ func verifyPath(path string) (string, error) {
 
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *http.Request) {
-	var alerts []alert
 	// Get search query parameter
 	query := r.URL.Query().Get("q")
 
-	// Filter alerts if query is provided
-	if query != "" {
-		alerts = filterAlerts(alertStore, query)
-	} else {
-		alerts = alertStore
-	}
+	alerts := filterAlerts(alertStore, query)
 
 	w.Header().Set(contentType, applicationJSON)
 	err := json.NewEncoder(w).Encode(alerts)
 	if err != nil {
-		logger.Error("error encoding alerts: ", zap.String("error", err.Error()))
-		http.Error(w, "error encoding alerts", http.StatusInternalServerError)
+		log.Error("error encoding alerts: ", zap.String("error", err.Error()))
+		http.Error(w, "", http.StatusInternalServerError)
 	}
 }
 
@@ -518,8 +507,8 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	//Parse the templates in web/templates/
 	tmpl, err := template.ParseFiles("web/templates/alertStore.html.templ")
 	if err != nil {
-		logger.Error("error parsing templates: ", zap.String("error", err.Error()))
-		http.Error(w, "error parsing templates", http.StatusInternalServerError)
+		log.Error("error parsing templates: ", zap.String("error", err.Error()))
+		http.Error(w, "", http.StatusInternalServerError)
 	}
 
 	query := r.URL.Query().Get("q")
@@ -537,8 +526,8 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	//Execute the templates
 	err = tmpl.Execute(w, s)
 	if err != nil {
-		logger.Error("error executing templates: ", zap.String("error", err.Error()))
-		http.Error(w, "error executing templates", http.StatusInternalServerError)
+		log.Error("error executing templates: ", zap.String("error", err.Error()))
+		http.Error(w, "", http.StatusInternalServerError)
 	}
 }
 
@@ -546,13 +535,13 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 func getAlerts(query string) []alert {
 	resp, err := http.Get("http://localhost:8080/alertStore?q=" + query)
 	if err != nil {
-		logger.Error("error getting alerts: ", zap.String("error", err.Error()))
+		log.Error("error getting alerts: ", zap.String("error", err.Error()))
 	}
 	defer resp.Body.Close()
 	var alerts []alert
 	err = json.NewDecoder(resp.Body).Decode(&alerts)
 	if err != nil {
-		logger.Error("error decoding alerts: ", zap.String("error", err.Error()))
+		log.Error("error decoding alerts: ", zap.String("error", err.Error()))
 	}
 	return alerts
 }
