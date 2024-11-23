@@ -18,18 +18,6 @@ const (
 	MetricsEndpointPort = ":2223"
 )
 
-// Function to get metrics values from runtime/metrics package
-func getAllMetrics() []metrics.Sample {
-	metricsMetadata := metrics.All()
-	samples := make([]metrics.Sample, len(metricsMetadata))
-	// update name of each sample
-	for idx := range metricsMetadata {
-		samples[idx].Name = metricsMetadata[idx].Name
-	}
-	metrics.Read(samples)
-	return samples
-}
-
 // Function to get metrics values from runtime/metrics package as float64
 func GetSingleMetricFloat(metricName string) float64 {
 
@@ -55,8 +43,11 @@ func getFloat64(sample metrics.Sample) float64 {
 		floatVal = float64(sample.Value.Float64())
 	case metrics.KindBad:
 		log.Error("bug in runtime/metrics package!")
+	case metrics.KindFloat64Histogram:
+		// Handle histogram kind if needed
+		floatVal = 0.0 // Placeholder, update with actual logic if needed
 	default:
-		log.Error(fmt.Sprintf("%s: unexpected metric Kind: %v\n", sample.Name, sample.Value.Kind()))
+		log.Error(fmt.Sprintf("%s: unexpected metric Kind: %v", sample.Name, sample.Value.Kind()))
 	}
 	return floatVal
 }
@@ -103,8 +94,8 @@ func AddMetricsToPrometheusRegistry() {
 // getMetricsOptions function to get prometheus options for a metric
 func getMetricsOptions(metric metrics.Description) prometheus.Opts {
 	tokens := strings.Split(metric.Name, "/")
-	log.Error("error getting metric options: ", zap.String("error", metric.Name))
 	if len(tokens) < 2 {
+		log.Error("error getting metric options: invalid metric name", zap.String("metric", metric.Name))
 		return prometheus.Opts{}
 	}
 	nameTokens := strings.Split(tokens[len(tokens)-1], ":")
