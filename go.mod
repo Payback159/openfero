@@ -1,14 +1,12 @@
 module github.com/Payback159/openfero
 
-go 1.22.0
-
-toolchain go1.22.6
+go 1.23.0
 
 require (
 	github.com/ghodss/yaml v1.0.0
-	k8s.io/api v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/client-go v0.31.0
+	k8s.io/api v0.31.3
+	k8s.io/apimachinery v0.31.3
+	k8s.io/client-go v0.31.3
 )
 
 require (
