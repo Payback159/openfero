@@ -451,38 +451,21 @@ func verifyPath(path string) (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Error("Error getting working directory: ", zap.String("error", err.Error()))
-		return path, errors.New(errmsg)
+		return "", errors.New(errmsg)
 	}
 	trustedRoot := filepath.Join(wd, "web")
 	log.Debug("Trusted root directory: " + trustedRoot)
 
 	// Clean the path to remove any .. or . elements
 	cleanPath := filepath.Clean(path)
-	if strings.HasPrefix(cleanPath, "..") {
-		return "", errors.New(errmsg)
-	}
-
 	// Join the trusted root and the cleaned path
-	fullPath := filepath.Join(trustedRoot, cleanPath)
-	log.Debug("Verifying path " + fullPath)
-
-	// Evaluate symbolic links
-	p, err := filepath.EvalSymlinks(fullPath)
-	if err != nil {
-		log.Error("Error evaluating path: ", zap.String("error", err.Error()))
+	absPath, err := filepath.Abs(filepath.Join(trustedRoot, cleanPath))
+	if err != nil || !strings.HasPrefix(absPath, trustedRoot) {
+		log.Error("Error getting absolute path: ", zap.String("error", err.Error()))
 		return "", errors.New(errmsg)
 	}
 
-	log.Debug("Evaluated path " + p)
-
-	// Check if the evaluated path is within the trusted root directory
-	rel, err := filepath.Rel(trustedRoot, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		log.Error("Path is outside of trusted root: ", zap.String("path", p))
-		return "", errors.New(errmsg)
-	}
-
-	return p, nil
+	return absPath, nil
 }
 
 // function which provides alerts array to the getHandler
