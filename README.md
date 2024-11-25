@@ -37,8 +37,8 @@ The job definitions are stored in the namespace in ConfigMaps with the naming co
 
 ### Example-Names
 
-* `openfero-KubeQuotaAlmostReached-firing`
-* `openfero-KubeQuotaAlmostReached-resolved`
+- `openfero-KubeQuotaAlmostReached-firing`
+- `openfero-KubeQuotaAlmostReached-resolved`
 
 ### Job-Example
 
@@ -53,21 +53,21 @@ spec:
   parallelism: 1
   completions: 1
   template:
-      labels:
-        app: openfero
-      spec:
-        containers:
+    labels:
+      app: openfero
+    spec:
+      containers:
         - name: python-job
           image: python:latest
           args:
-          - bash
-          - -c
-          - |-
-            echo "Hallo Welt"
-        imagePullPolicy: Always
-        restartPolicy: Never
-        serviceAccount: <desired-sa>
-        serviceAccountName: <desired-sa>
+            - bash
+            - -c
+            - |-
+              echo "Hallo Welt"
+      imagePullPolicy: Always
+      restartPolicy: Never
+      serviceAccount: <desired-sa>
+      serviceAccountName: <desired-sa>
 ```
 
 ## Security note
@@ -75,6 +75,5 @@ spec:
 The service account that is installed when deploying openfero is for openfero itself. For the jobs, separate service accounts must be rolled out, which have the appropriate permissions for the job.
 
 For jobs that need to interact with the Kubernetes API, it is recommended to define a suitable role for the job and authorize it via ServiceAccount in the job definition.
-
 
 [comp-dia]: ./docs/component-diagram.png
