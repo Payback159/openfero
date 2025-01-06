@@ -31,6 +31,12 @@ import (
 const contentType = "Content-Type"
 const applicationJSON = "application/json"
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 type (
 	hookMessage struct {
 		Version           string            `json:"version"`
@@ -110,6 +116,8 @@ func main() {
 	if log.SetConfig(cfg) != nil {
 		log.Fatal("Could not set log configuration")
 	}
+
+	log.Info("Starting OpenFero", zap.String("version", version), zap.String("commit", commit), zap.String("date", date))
 
 	// Use the in-cluster config to create a kubernetes client
 	clientset := initKubeClient(kubeconfig)
