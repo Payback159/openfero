@@ -3,6 +3,7 @@
     "ignore": [
         "**/test/**",
         "**/k8s-deployment/**",
-        "**/node_modules/**"
+        "**/node_modules/**",
+        "**/web/assets/js/bootstrap.min.js"
     ]
 }
