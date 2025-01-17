@@ -7,8 +7,5 @@
         "message": "Expected BEM naming convention for class."
       }
     ]
-  },
-  "ignoreFiles": [
-    "web/assets/css/bootstrap.min.css"
-  ]
+  }
 }
