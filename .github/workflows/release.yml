@@ -62,7 +62,7 @@ jobs:
       - name: Set appVersion in Chart.yaml
         run: |
           sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
-         
+
       - name: Run chart-releaser
         id: chart-releaser
         uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
