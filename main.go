@@ -88,6 +88,97 @@ func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
 	return clientset
 }
 
+func initConfigMapInformer(clientset *kubernetes.Clientset, configmapNamespace string) cache.Store {
+	// Create informer factory
+	configMapfactory := informers.NewSharedInformerFactoryWithOptions(
+		clientset,
+		time.Hour*1,
+		informers.WithNamespace(configmapNamespace),
+	)
+
+	// Get ConfigMap informer
+	configMapInformer := configMapfactory.Core().V1().ConfigMaps().Informer()
+
+	// Add event handlers to configMap informer
+	if _, err := configMapInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			log.Debug("ConfigMap added to store")
+		},
+		UpdateFunc: func(old, new interface{}) {
+			log.Debug("ConfigMap updated in store")
+		},
+		DeleteFunc: func(obj interface{}) {
+			log.Debug("ConfigMap removed from store")
+		},
+	}); err != nil {
+		log.Fatal("Failed to add ConfigMap event handler", zap.String("error", err.Error()))
+	}
+
+	// Start configMap informer
+	go configMapfactory.Start(context.Background().Done())
+
+	// Wait for cache sync
+	if !cache.WaitForCacheSync(context.Background().Done(), configMapInformer.HasSynced) {
+		log.Fatal("Failed to sync ConfigMap cache")
+	}
+
+	return configMapInformer.GetStore()
+
+}
+
+func initJobInformer(clientset *kubernetes.Clientset, jobDestinationNamespace string, labelSelector metav1.LabelSelector) cache.Store {
+	// Create informer factory
+	jobFactory := informers.NewSharedInformerFactoryWithOptions(
+		clientset,
+		time.Hour*1,
+		informers.WithNamespace(jobDestinationNamespace),
+		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
+			options.LabelSelector = metav1.FormatLabelSelector(&labelSelector)
+		}),
+	)
+
+	// Get Job informer
+	jobInformer := jobFactory.Batch().V1().Jobs().Informer()
+
+	// Add event handlers to job informer
+	// Add job event handlers
+	if _, err := jobInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			job := obj.(*batchv1.Job)
+			log.Debug("Job added: " + job.Name)
+			metadata.JobsCreatedTotal.Inc()
+		},
+		UpdateFunc: func(old, new interface{}) {
+			job := new.(*batchv1.Job)
+			if job.Status.Succeeded > 0 {
+				log.Debug("Job completed successfully: " + job.Name)
+				metadata.JobsSucceededTotal.Inc()
+			}
+			if job.Status.Failed > 0 {
+				log.Debug("Job failed: " + job.Name)
+				metadata.JobsFailedTotal.Inc()
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			job := obj.(*batchv1.Job)
+			log.Debug("Job deleted: " + job.Name)
+		},
+	}); err != nil {
+		log.Fatal("Failed to add Job event handler", zap.String("error", err.Error()))
+	}
+
+	// Start job informer
+	go jobFactory.Start(context.Background().Done())
+
+	// Wait for job cache sync
+	if !cache.WaitForCacheSync(context.Background().Done(), jobInformer.HasSynced) {
+		log.Fatal("Failed to sync Job cache")
+	}
+
+	return jobInformer.GetStore()
+
+}
+
 func main() {
 
 	// Parse command line arguments
@@ -165,86 +256,17 @@ func main() {
 		},
 	}
 
-	// Create informer factory
-	configMapfactory := informers.NewSharedInformerFactoryWithOptions(
-		clientset,
-		time.Hour*1,
-		informers.WithNamespace(*configmapNamespace),
-	)
-
+	// Create informer factory for configmaps
+	configMapInformer := initConfigMapInformer(clientset, *configmapNamespace)
 	// Create informer factory for jobs
-	jobFactory := informers.NewSharedInformerFactoryWithOptions(
-		clientset,
-		time.Hour*1,
-		informers.WithNamespace(*jobDestinationNamespace),
-		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
-			options.LabelSelector = metav1.FormatLabelSelector(&labelSelector)
-		}),
-	)
-
-	// Get ConfigMap informer
-	configMapInformer := configMapfactory.Core().V1().ConfigMaps().Informer()
-	// Get Job informer
-	jobInformer := jobFactory.Batch().V1().Jobs().Informer()
+	jobInformer := initJobInformer(clientset, *jobDestinationNamespace, labelSelector)
 
 	server := &clientsetStruct{
 		clientset:               *clientset,
 		jobDestinationNamespace: *jobDestinationNamespace,
 		configmapNamespace:      *configmapNamespace,
-		configMapStore:          configMapInformer.GetStore(),
-		jobStore:                jobInformer.GetStore(),
-	}
-
-	// Add event handlers to configMap informer
-	configMapInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			log.Debug("ConfigMap added to store")
-		},
-		UpdateFunc: func(old, new interface{}) {
-			log.Debug("ConfigMap updated in store")
-		},
-		DeleteFunc: func(obj interface{}) {
-			log.Debug("ConfigMap removed from store")
-		},
-	})
-
-	// Add job event handlers
-	jobInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			job := obj.(*batchv1.Job)
-			log.Debug("Job added: " + job.Name)
-			metadata.JobsCreatedTotal.Inc()
-		},
-		UpdateFunc: func(old, new interface{}) {
-			job := new.(*batchv1.Job)
-			if job.Status.Succeeded > 0 {
-				log.Debug("Job completed successfully: " + job.Name)
-				metadata.JobsSucceededTotal.Inc()
-			}
-			if job.Status.Failed > 0 {
-				log.Debug("Job failed: " + job.Name)
-				metadata.JobsFailedTotal.Inc()
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			job := obj.(*batchv1.Job)
-			log.Debug("Job deleted: " + job.Name)
-		},
-	})
-
-	// Start configMap informer
-	go configMapfactory.Start(context.Background().Done())
-	// Start job informer
-	go jobFactory.Start(context.Background().Done())
-
-	// Wait for cache sync
-	if !cache.WaitForCacheSync(context.Background().Done(), configMapInformer.HasSynced) {
-		log.Fatal("Failed to sync ConfigMap cache")
-	}
-
-	// Wait for job cache sync
-	if !cache.WaitForCacheSync(context.Background().Done(), jobInformer.HasSynced) {
-		log.Fatal("Failed to sync Job cache")
+		configMapStore:          configMapInformer,
+		jobStore:                jobInformer,
 	}
 
 	//register metrics and set prometheus handler
