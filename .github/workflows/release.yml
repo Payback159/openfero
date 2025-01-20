@@ -59,18 +59,13 @@ jobs:
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
           # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
 
-      - name: Set appVersion in Chart.yaml
+      - name: Package charts
+        id: chart-releaser
         run: |
           sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
-
-      - name: Run chart-releaser
-        id: chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0 # v1.7.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        with:
-          skip_upload: true
-          skip_existing: true
+          helm package charts/* --destination .cr-release-packages
+          # Do it this way to hopefully can use helm/chart-releaser-action when skip_upload is working
+          echo "::set-output name=changed_charts::$(ls .cr-release-packages | sed 's/-.*//g' | tr '\n' ',')"
 
       - name: Push charts to GHCR
         id: push-charts
