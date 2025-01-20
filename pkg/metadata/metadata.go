@@ -18,6 +18,29 @@ const (
 	MetricsEndpointPort = ":2223"
 )
 
+var (
+	JobsCreatedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+
+		Name: "openfero_jobs_created_total",
+
+		Help: "Total number of jobs created",
+	})
+
+	JobsSucceededTotal = prometheus.NewCounter(prometheus.CounterOpts{
+
+		Name: "openfero_jobs_succeeded_total",
+
+		Help: "Total number of jobs succeeded",
+	})
+
+	JobsFailedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+
+		Name: "openfero_jobs_failed_total",
+
+		Help: "Total number of jobs failed",
+	})
+)
+
 // Function to get metrics values from runtime/metrics package as float64
 func GetSingleMetricFloat(metricName string) float64 {
 
@@ -69,6 +92,10 @@ func getMetricSubsystemName(metric metrics.Description) string {
 
 // function which registers metrics to the prometheus registry
 func AddMetricsToPrometheusRegistry() {
+	// Register the metrics with Prometheus
+	prometheus.MustRegister(JobsCreatedTotal)
+	prometheus.MustRegister(JobsSucceededTotal)
+	prometheus.MustRegister(JobsFailedTotal)
 	// Get descriptions for all supported metrics.
 	metricsMeta := metrics.All()
 	// Register metrics and retrieve the values in prometheus client
