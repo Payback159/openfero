@@ -58,3 +58,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
           # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+
+      - name: Set appVersion in Chart.yaml
+        run: |
+          sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
+
+      - name: Run chart-releaser
+        id: chart-releaser
+        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          skip_upload: true
+          skip_existing: true
+
+      - name: Push charts to GHCR
+        id: push-charts
+        run: |
+          if [[ -n "${{ steps.chart-releaser.outputs.changed_charts }}" ]]; then
+            for chart in ${steps.chart-releaser.outputs.changed_charts//,/ }; do
+              helm push ".cr-release-packages/${chart}-*.tgz" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts"
+            done
+          fi

@@ -34,6 +34,6 @@ jobs:
           VALIDATE_CHECKOV: false
           VALIDATE_GO: false
           VALIDATE_YAML: false
-          KUBERNETES_KUBECONFORM_OPTIONS: "--ignore-missing-schemas --ignore-filename-pattern=deployments/helm/*"
+          KUBERNETES_KUBECONFORM_OPTIONS: "--ignore-missing-schemas --ignore-filename-pattern=charts/*"
           DEFAULT_BRANCH: "origin/main"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
