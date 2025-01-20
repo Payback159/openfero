@@ -5,15 +5,27 @@ enhancement:
           - "cmd/**/*"
           - "internal/**/*"
           - "main.go"
-ci:
+
+github_actions:
   - changed-files:
       - any-glob-to-any-file:
           - ".github/workflows/**"
+          - ".github/**"
+
+automation:
+  - changed-files:
+      - any-glob-to-any-file:
           - "charts/**/*"
           - "Dockerfile"
           - "Makefile"
           - ".dockerignore"
           - ".helmignore"
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Dockerfile"
+          - ".dockerignore"
 
 documentation:
   - changed-files:
