@@ -65,13 +65,15 @@ jobs:
           sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
           helm package charts/* --destination .cr-release-packages
           # Do it this way to hopefully can use helm/chart-releaser-action when skip_upload is working
-          echo "::set-output name=changed_charts::$(ls .cr-release-packages | sed 's/-.*//g' | tr '\n' ',')"
+          echo "changed_charts=$(ls .cr-release-packages | sed 's/-.*//g' | tr '\n' ',') >> $GITHUB_OUTPUT"
 
       - name: Push charts to GHCR
         id: push-charts
         run: |
-          if [[ -n "${{ steps.chart-releaser.outputs.changed_charts }}" ]]; then
-            for chart in ${steps.chart-releaser.outputs.changed_charts//,/ }; do
-              helm push ".cr-release-packages/${chart}-*.tgz" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts"
-            done
-          fi
+           shopt -s nullglob
+           for pkg in .cr-release-packages/*; do
+             if [ -z "${pkg:-}" ]; then
+               break
+             fi
+             helm push "${pkg}" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts"
+           done
