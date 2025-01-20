@@ -1,2 +1,4 @@
-deployments/helm/
+charts/
 web/assets/js/htmx.min.js
+web/assets/js/bootstrap.min.js
+web/assets/css/bootstrap.min.css

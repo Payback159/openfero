@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Lint Code Base
-        uses: super-linter/super-linter/slim@b92721f792f381cedc002ecdbb9847a15ece5bb8 # v7.1.0
+        uses: super-linter/super-linter/slim@85f7611e0f7b53c8573cca84aa0ed4344f6f6a4d # v7.2.1
         env:
           VALIDATE_ALL_CODEBASE: true
           VALIDATE_CHECKOV: false
@@ -38,6 +38,6 @@ jobs:
           FIX_MARKDOWN: true
           FIX_SHELL_SHFMT: true
           FIX_CSS: true
-          KUBERNETES_KUBECONFORM_OPTIONS: "--ignore-missing-schemas --ignore-filename-pattern=deployments/helm/*"
+          KUBERNETES_KUBECONFORM_OPTIONS: "--ignore-missing-schemas --ignore-filename-pattern=charts/*"
           DEFAULT_BRANCH: "origin/main"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

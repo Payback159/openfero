@@ -1,7 +1,8 @@
-package logger
+package logging
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var zapLog *zap.Logger
@@ -9,9 +10,12 @@ var zapLog *zap.Logger
 // SetConfig sets the logger configuration
 func SetConfig(config zap.Config) error {
 	var err error
-	enccoderConfig := zap.NewProductionEncoderConfig()
-	enccoderConfig.StacktraceKey = "" // to hide stacktrace info
-	config.EncoderConfig = enccoderConfig
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.StacktraceKey = "" // to hide stacktrace info
+	encoderConfig.TimeKey = "timestamp"
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder // format timestamp to ISO8601
+	config.EncoderConfig = encoderConfig
+	config.Encoding = "json" // set encoding to JSON
 	zapLog, err = config.Build(zap.AddCallerSkip(1))
 	if err != nil {
 		return err
