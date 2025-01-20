@@ -35,6 +35,9 @@ Common labels
 */}}
 {{- define "openfero.labels" -}}
 helm.sh/chart: {{ include "openfero.chart" . }}
+{{- if .Values.commonLabels }}
+{{ toYaml .Values.commonLabels}}
+{{- end }}
 {{ include "openfero.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
