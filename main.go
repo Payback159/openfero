@@ -23,8 +23,10 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	cache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -61,6 +63,8 @@ type (
 		clientset               kubernetes.Clientset
 		jobDestinationNamespace string
 		configmapNamespace      string
+		configMapStore          cache.Store
+		jobStore                cache.Store
 	}
 )
 
@@ -82,6 +86,97 @@ func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
 	}
 
 	return clientset
+}
+
+func initConfigMapInformer(clientset *kubernetes.Clientset, configmapNamespace string) cache.Store {
+	// Create informer factory
+	configMapfactory := informers.NewSharedInformerFactoryWithOptions(
+		clientset,
+		time.Hour*1,
+		informers.WithNamespace(configmapNamespace),
+	)
+
+	// Get ConfigMap informer
+	configMapInformer := configMapfactory.Core().V1().ConfigMaps().Informer()
+
+	// Add event handlers to configMap informer
+	if _, err := configMapInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			log.Debug("ConfigMap added to store")
+		},
+		UpdateFunc: func(old, new interface{}) {
+			log.Debug("ConfigMap updated in store")
+		},
+		DeleteFunc: func(obj interface{}) {
+			log.Debug("ConfigMap removed from store")
+		},
+	}); err != nil {
+		log.Fatal("Failed to add ConfigMap event handler", zap.String("error", err.Error()))
+	}
+
+	// Start configMap informer
+	go configMapfactory.Start(context.Background().Done())
+
+	// Wait for cache sync
+	if !cache.WaitForCacheSync(context.Background().Done(), configMapInformer.HasSynced) {
+		log.Fatal("Failed to sync ConfigMap cache")
+	}
+
+	return configMapInformer.GetStore()
+
+}
+
+func initJobInformer(clientset *kubernetes.Clientset, jobDestinationNamespace string, labelSelector metav1.LabelSelector) cache.Store {
+	// Create informer factory
+	jobFactory := informers.NewSharedInformerFactoryWithOptions(
+		clientset,
+		time.Hour*1,
+		informers.WithNamespace(jobDestinationNamespace),
+		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
+			options.LabelSelector = metav1.FormatLabelSelector(&labelSelector)
+		}),
+	)
+
+	// Get Job informer
+	jobInformer := jobFactory.Batch().V1().Jobs().Informer()
+
+	// Add event handlers to job informer
+	// Add job event handlers
+	if _, err := jobInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			job := obj.(*batchv1.Job)
+			log.Debug("Job added: " + job.Name)
+			metadata.JobsCreatedTotal.Inc()
+		},
+		UpdateFunc: func(old, new interface{}) {
+			job := new.(*batchv1.Job)
+			if job.Status.Succeeded > 0 {
+				log.Debug("Job completed successfully: " + job.Name)
+				metadata.JobsSucceededTotal.Inc()
+			}
+			if job.Status.Failed > 0 {
+				log.Debug("Job failed: " + job.Name)
+				metadata.JobsFailedTotal.Inc()
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			job := obj.(*batchv1.Job)
+			log.Debug("Job deleted: " + job.Name)
+		},
+	}); err != nil {
+		log.Fatal("Failed to add Job event handler", zap.String("error", err.Error()))
+	}
+
+	// Start job informer
+	go jobFactory.Start(context.Background().Done())
+
+	// Wait for job cache sync
+	if !cache.WaitForCacheSync(context.Background().Done(), jobInformer.HasSynced) {
+		log.Fatal("Failed to sync Job cache")
+	}
+
+	return jobInformer.GetStore()
+
 }
 
 func main() {
@@ -154,10 +249,24 @@ func main() {
 		jobDestinationNamespace = &currentNamespace
 	}
 
+	// Create label selector for openfero ConfigMaps
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app": "openfero",
+		},
+	}
+
+	// Create informer factory for configmaps
+	configMapInformer := initConfigMapInformer(clientset, *configmapNamespace)
+	// Create informer factory for jobs
+	jobInformer := initJobInformer(clientset, *jobDestinationNamespace, labelSelector)
+
 	server := &clientsetStruct{
 		clientset:               *clientset,
 		jobDestinationNamespace: *jobDestinationNamespace,
 		configmapNamespace:      *configmapNamespace,
+		configMapStore:          configMapInformer,
+		jobStore:                jobInformer,
 	}
 
 	//register metrics and set prometheus handler
@@ -273,11 +382,19 @@ func (server *clientsetStruct) createResponseJob(alert alert, status string, _ h
 	alertname := sanitizeInput(alert.Labels["alertname"])
 	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
 	log.Debug("Try to load configmap " + responsesConfigmap)
-	configMap, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).Get(context.TODO(), responsesConfigmap, metav1.GetOptions{})
+
+	// Get ConfigMap from store instead of API
+	obj, exists, err := server.configMapStore.GetByKey(server.configmapNamespace + "/" + responsesConfigmap)
 	if err != nil {
-		log.Error("error getting configmap: ", zap.String("error", err.Error()))
+		log.Error("error getting configmap from store: ", zap.String("error", err.Error()))
 		return
 	}
+	if !exists {
+		log.Error("configmap not found in store")
+		return
+	}
+
+	configMap := obj.(*v1.ConfigMap)
 
 	jobDefinition := configMap.Data[alertname]
 
@@ -314,6 +431,11 @@ func (server *clientsetStruct) createResponseJob(alert alert, status string, _ h
 		addJobTTL(jobObject)
 	}
 
+	// Adding labels to job if they are not already set
+	if !checkJobLabels(jobObject) {
+		addJobLabels(jobObject)
+	}
+
 	// Create the job
 	err = server.createRemediationJob(jobObject)
 	if err != nil {
@@ -324,12 +446,20 @@ func (server *clientsetStruct) createResponseJob(alert alert, status string, _ h
 }
 
 func (server *clientsetStruct) createRemediationJob(jobObject *batchv1.Job) error {
-	// Job client for creating the job according to the job definitions extracted from the responses configMap
-	jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
+	// Check if job already exists
+	_, exists, err := server.jobStore.GetByKey(server.jobDestinationNamespace + "/" + jobObject.Name)
+	if err != nil {
+		log.Error("error checking job existence: ", zap.String("error", err.Error()))
+		return err
+	}
+	if exists {
+		return fmt.Errorf("job %s already exists", jobObject.Name)
+	}
 
 	// Create job
+	jobsClient := server.clientset.BatchV1().Jobs(server.jobDestinationNamespace)
 	log.Info("Creating job " + jobObject.Name)
-	_, err := jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
+	_, err = jobsClient.Create(context.TODO(), jobObject, metav1.CreateOptions{})
 	if err != nil {
 		log.Error("error creating job: ", zap.String("error", err.Error()))
 		return err
@@ -353,6 +483,15 @@ func checkJobTTL(jobObject *batchv1.Job) bool {
 func addJobTTL(jobObject *batchv1.Job) {
 	ttl := int32(300)
 	jobObject.Spec.TTLSecondsAfterFinished = &ttl
+}
+
+func checkJobLabels(jobObject *batchv1.Job) bool {
+	return jobObject.Labels != nil
+}
+
+func addJobLabels(jobObject *batchv1.Job) {
+	jobObject.Labels = make(map[string]string)
+	jobObject.Labels["app"] = "openfero"
 }
 
 // function which saves the alert in the alertStore
