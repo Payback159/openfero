@@ -2,7 +2,7 @@
   "threshold": 5,
   "ignore": [
     "**/test/**",
-    "**/k8s-deployment/**",
+    "**/charts/**",
     "**/node_modules/**",
     "**/web/assets/js/bootstrap.min.js"
   ]
