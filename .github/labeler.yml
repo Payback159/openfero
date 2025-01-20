@@ -1,0 +1,24 @@
+# Enhancement related files
+enhancement:
+  - "pkg/**/*"
+  - "cmd/**/*"
+  - "internal/**/*"
+  - "main.go"
+  - ".github/ISSUE_TEMPLATE/feature_request.md"
+
+# CI/CD related files
+ci:
+  - ".github/workflows/**/*"
+  - "charts/**/*"
+  - ".helmignore"
+  - "Dockerfile"
+  - "Makefile"
+  - ".dockerignore"
+
+# Documentation related files
+documentation:
+  - "docs/**/*"
+  - "**/*.md"
+  - "LICENSE"
+  - "CODE_OF_CONDUCT.md"
+  - "**/README.md"
