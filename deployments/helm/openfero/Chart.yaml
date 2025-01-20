@@ -3,4 +3,4 @@ name: openfero
 description: OpenFero is intended as an event-triggered job scheduler framework for code agnostic recovery jobs.
 type: application
 version: 0.1.0
-appVersion: "0.7.5"
+appVersion: "0.8.0"
