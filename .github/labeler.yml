@@ -1,24 +1,25 @@
-# Enhancement related files
 enhancement:
-  - "pkg/**/*"
-  - "cmd/**/*"
-  - "internal/**/*"
-  - "main.go"
-  - ".github/ISSUE_TEMPLATE/feature_request.md"
-
-# CI/CD related files
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pkg/**/*"
+          - "cmd/**/*"
+          - "internal/**/*"
+          - "main.go"
 ci:
-  - ".github/workflows/**/*"
-  - "charts/**/*"
-  - ".helmignore"
-  - "Dockerfile"
-  - "Makefile"
-  - ".dockerignore"
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - "charts/**/*"
+          - "Dockerfile"
+          - "Makefile"
+          - ".dockerignore"
+          - ".helmignore"
 
-# Documentation related files
 documentation:
-  - "docs/**/*"
-  - "**/*.md"
-  - "LICENSE"
-  - "CODE_OF_CONDUCT.md"
-  - "**/README.md"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**/*"
+          - "**/README.md"
+          - "CODE_OF_CONDUCT.md"
+          - "LICENSE"
+          - "*.md"
