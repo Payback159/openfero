@@ -155,13 +155,14 @@ func initJobInformer(clientset *kubernetes.Clientset, jobDestinationNamespace st
 			metadata.JobsCreatedTotal.Inc()
 		},
 		UpdateFunc: func(old, new interface{}) {
-			job := new.(*batchv1.Job)
-			if job.Status.Succeeded > 0 {
-				log.Debug("Job completed successfully: " + job.Name)
+			oldJob := old.(*batchv1.Job)
+			newJob := new.(*batchv1.Job)
+			if newJob.Status.Succeeded > 0 && oldJob.Status.Succeeded == 0 {
+				log.Debug("Job completed successfully: " + newJob.Name)
 				metadata.JobsSucceededTotal.Inc()
 			}
-			if job.Status.Failed > 0 {
-				log.Debug("Job failed: " + job.Name)
+			if newJob.Status.Failed > 0 && oldJob.Status.Failed == 0 {
+				log.Debug("Job failed: " + newJob.Name)
 				metadata.JobsFailedTotal.Inc()
 			}
 		},
