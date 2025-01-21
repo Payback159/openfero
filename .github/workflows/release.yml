@@ -29,20 +29,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Package charts
-        id: chart-releaser
-        run: |
-          sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
-          helm package charts/* --destination .cr-release-packages
-
-      - name: Push update Chart.yaml to main
-        run: |
-          git config user.name github-actions
-          git config user.email
-          git add charts/openfero/Chart.yaml
-          git commit -m "Update Chart.yaml"
-          git push
-
       - run: git tag ${{ github.event.inputs.tag }}
 
       - name: Set up Go
@@ -73,13 +59,19 @@ jobs:
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
           # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
 
+      - name: Package charts
+        id: chart-releaser
+        run: |
+          sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
+          helm package charts/* --destination .cr-release-packages
+
       - name: Push charts to GHCR
         id: push-charts
         run: |
-          shopt -s nullglob
-          for pkg in .cr-release-packages/*; do
-            if [ -z "${pkg:-}" ]; then
-              break
-            fi
-            helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
-          done
+           shopt -s nullglob
+           for pkg in .cr-release-packages/*; do
+             if [ -z "${pkg:-}" ]; then
+               break
+             fi
+             helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
+           done
