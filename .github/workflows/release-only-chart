@@ -1,0 +1,57 @@
+# .github/workflows/release.yml
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine latest release tag
+        id: get_latest_release
+        run: |
+          latest_release=$(curl -sL "https://api.github.com/repos/payback159/openfero/releases/latest" | jq -r '.tag_name')
+          echo "latest_release=$latest_release" >> $GITHUB_OUTPUT
+
+      - name: Package charts
+        id: chart-releaser
+        run: |
+          sed -i "s/^appVersion: .*/appVersion: ${{ steps.get_latest_release.outputs.latest_release }}/g" charts/openfero/Chart.yaml
+          helm package charts/* --destination .cr-release-packages
+
+      - name: Push charts to GHCR
+        id: push-charts
+        run: |
+           shopt -s nullglob
+           for pkg in .cr-release-packages/*; do
+             if [ -z "${pkg:-}" ]; then
+               break
+             fi
+             helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
+           done
