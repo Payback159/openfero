@@ -88,12 +88,15 @@ func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
 	return clientset
 }
 
-func initConfigMapInformer(clientset *kubernetes.Clientset, configmapNamespace string) cache.Store {
+func initConfigMapInformer(clientset *kubernetes.Clientset, configmapNamespace string, labelSelector metav1.LabelSelector) cache.Store {
 	// Create informer factory
 	configMapfactory := informers.NewSharedInformerFactoryWithOptions(
 		clientset,
 		time.Hour*1,
 		informers.WithNamespace(configmapNamespace),
+		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
+			options.LabelSelector = metav1.FormatLabelSelector(&labelSelector)
+		}),
 	)
 
 	// Get ConfigMap informer
@@ -257,7 +260,7 @@ func main() {
 	}
 
 	// Create informer factory for configmaps
-	configMapInformer := initConfigMapInformer(clientset, *configmapNamespace)
+	configMapInformer := initConfigMapInformer(clientset, *configmapNamespace, labelSelector)
 	// Create informer factory for jobs
 	jobInformer := initJobInformer(clientset, *jobDestinationNamespace, labelSelector)
 
