@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenFero - {{ .Title }}</title>
+    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body style="padding-top: 70px;">
+    {{ template "navbar" . }}
+    <div class="container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ConfigMap Name</th>
+                    <th>Job Name</th>
+                    <th>Container Image</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Jobs }}
+                <tr>
+                    <td>{{ .ConfigMapName }}</td>
+                    <td>{{ .JobName }}</td>
+                    <td>{{ .Image }}</td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -40,6 +40,12 @@ var (
 )
 
 type (
+	jobInfo struct {
+		ConfigMapName string
+		JobName       string
+		Image         string
+	}
+
 	hookMessage struct {
 		Version           string            `json:"version"`
 		GroupKey          string            `json:"groupKey"`
@@ -280,6 +286,7 @@ func main() {
 	http.HandleFunc("GET /alerts", server.alertsGetHandler)
 	http.HandleFunc("POST /alerts", server.alertsPostHandler)
 	http.HandleFunc("GET /ui", uiHandler)
+	http.HandleFunc("GET /ui/jobs", server.jobsUIHandler)
 	http.HandleFunc("GET /assets/", assetsHandler)
 
 	srv := &http.Server{
@@ -635,7 +642,10 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	var alerts []alert
 	w.Header().Set(contentType, "text/html")
 	//Parse the templates in web/templates/
-	tmpl, err := template.ParseFiles("web/templates/alertStore.html.templ")
+	tmpl, err := template.ParseFiles(
+		"web/templates/alertStore.html.templ",
+		"web/templates/navbar.html.templ",
+	)
 	if err != nil {
 		log.Error("error parsing templates: ", zap.String("error", err.Error()))
 		http.Error(w, "", http.StatusInternalServerError)
@@ -645,16 +655,18 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 
 	alerts = getAlerts(query)
 
-	s := struct {
-		Title  string
-		Alerts []alert
+	data := struct {
+		Title      string
+		ShowSearch bool
+		Alerts     []alert
 	}{
-		Title:  "Alert Store",
-		Alerts: alerts,
+		Title:      "Alerts",
+		ShowSearch: true,
+		Alerts:     alerts,
 	}
 
 	//Execute the templates
-	err = tmpl.Execute(w, s)
+	err = tmpl.Execute(w, data)
 	if err != nil {
 		log.Error("error executing templates: ", zap.String("error", err.Error()))
 		http.Error(w, "", http.StatusInternalServerError)
@@ -674,4 +686,66 @@ func getAlerts(query string) []alert {
 		log.Error("error decoding alerts: ", zap.String("error", err.Error()))
 	}
 	return alerts
+}
+
+func (server *clientsetStruct) jobsUIHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentType, "text/html")
+
+	// Get all ConfigMaps from store
+	var jobInfos []jobInfo
+	for _, obj := range server.configMapStore.List() {
+		configMap := obj.(*v1.ConfigMap)
+
+		// Process each job definition in ConfigMap
+		for name, jobDef := range configMap.Data {
+			// Parse YAML job definition
+			yamlJobDefinition := []byte(jobDef)
+			jsonBytes, err := yaml.YAMLToJSON(yamlJobDefinition)
+			if err != nil {
+				log.Error("error converting YAML to JSON", zap.String("error", err.Error()))
+				continue
+			}
+
+			jobObject := &batchv1.Job{}
+			if err := json.Unmarshal(jsonBytes, jobObject); err != nil {
+				log.Error("error unmarshaling job definition", zap.String("error", err.Error()))
+				continue
+			}
+
+			// Extract container image
+			if len(jobObject.Spec.Template.Spec.Containers) > 0 {
+				jobInfos = append(jobInfos, jobInfo{
+					ConfigMapName: configMap.Name,
+					JobName:       name,
+					Image:         jobObject.Spec.Template.Spec.Containers[0].Image,
+				})
+			}
+		}
+	}
+
+	// Parse and execute template
+	tmpl, err := template.ParseFiles(
+		"web/templates/jobs.html.templ",
+		"web/templates/navbar.html.templ",
+	)
+	if err != nil {
+		log.Error("error parsing template", zap.String("error", err.Error()))
+		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		Title      string
+		ShowSearch bool
+		Jobs       []jobInfo
+	}{
+		Title:      "Jobs",
+		ShowSearch: false,
+		Jobs:       jobInfos,
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Error("error executing template", zap.String("error", err.Error()))
+		http.Error(w, "", http.StatusInternalServerError)
+	}
 }
