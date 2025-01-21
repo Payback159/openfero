@@ -9,7 +9,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "openfero.labels" . | nindent 4 }}
-  namespace: {{ .Release.Namespace }}
 rules:
   - resources:
     - jobs
