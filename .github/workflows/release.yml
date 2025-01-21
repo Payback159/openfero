@@ -76,10 +76,10 @@ jobs:
       - name: Push charts to GHCR
         id: push-charts
         run: |
-           shopt -s nullglob
-           for pkg in .cr-release-packages/*; do
-             if [ -z "${pkg:-}" ]; then
-               break
-             fi
-             helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
-           done
+          shopt -s nullglob
+          for pkg in .cr-release-packages/*; do
+            if [ -z "${pkg:-}" ]; then
+              break
+            fi
+            helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
+          done
