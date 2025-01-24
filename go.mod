@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/ghodss/yaml v1.0.0
 	k8s.io/api v0.32.0
-	k8s.io/apimachinery v0.32.0
+	k8s.io/apimachinery v0.32.1
 	k8s.io/client-go v0.32.0
 )
 
@@ -16,7 +16,6 @@ require (
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
