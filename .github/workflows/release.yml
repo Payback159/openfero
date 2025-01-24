@@ -73,5 +73,5 @@ jobs:
              if [ -z "${pkg:-}" ]; then
                break
              fi
-             helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
+             helm push "${pkg}" "oci://ghcr.io/openfero/openfero/charts"
            done

@@ -6,14 +6,14 @@ import (
 	metrics "runtime/metrics"
 	"strings"
 
-	log "github.com/Payback159/openfero/pkg/logging"
+	log "github.com/OpenFero/openfero/pkg/logging"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
 	errorValue          = -1.0
-	OtelScope           = "https://github.com/Payback159/openfero"
+	OtelScope           = "https://github.com/OpenFero/openfero"
 	MetricsPath         = "/metrics"
 	MetricsEndpointPort = ":2223"
 )

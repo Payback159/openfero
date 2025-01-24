@@ -1,4 +1,4 @@
-module github.com/Payback159/openfero
+module github.com/OpenFero/openfero
 
 go 1.23.0
 

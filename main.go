@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Payback159/openfero/pkg/logging"
-	"github.com/Payback159/openfero/pkg/metadata"
+	log "github.com/OpenFero/openfero/pkg/logging"
+	"github.com/OpenFero/openfero/pkg/metadata"
 	"github.com/ghodss/yaml"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"

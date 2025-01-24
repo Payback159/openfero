@@ -36,7 +36,7 @@ jobs:
       - name: Determine latest release tag
         id: get_latest_release
         run: |
-          latest_release=$(curl -sL "https://api.github.com/repos/payback159/openfero/releases/latest" | jq -r '.tag_name')
+          latest_release=$(curl -sL "https://api.github.com/repos/openfero/openfero/releases/latest" | jq -r '.tag_name')
           echo "latest_release=$latest_release" >> $GITHUB_OUTPUT
 
       - name: Package charts
@@ -53,5 +53,5 @@ jobs:
              if [ -z "${pkg:-}" ]; then
                break
              fi
-             helm push "${pkg}" "oci://ghcr.io/payback159/openfero/charts"
+             helm push "${pkg}" "oci://ghcr.io/openfero/openfero/charts"
            done
