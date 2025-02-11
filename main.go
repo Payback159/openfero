@@ -1,16 +1,3 @@
-// @title OpenFero API
-// @version 1.0
-// @description OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name GitHub Issues
-// @contact.url https://github.com/OpenFero/openfero/issues
-
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host localhost:8080
-// @BasePath /
 package main
 
 import (
@@ -218,6 +205,19 @@ func initJobInformer(clientset *kubernetes.Clientset, jobDestinationNamespace st
 
 }
 
+// @title OpenFero API
+// @version 1.0
+// @description OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name GitHub Issues
+// @contact.url https://github.com/OpenFero/openfero/issues
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:8080
+// @BasePath /
 func main() {
 
 	// Parse command line arguments

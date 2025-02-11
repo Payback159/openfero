@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Time when the alert ended",
+        "description": "OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.",
         "title": "OpenFero API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
