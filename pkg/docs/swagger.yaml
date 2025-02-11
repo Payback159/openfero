@@ -64,7 +64,8 @@ info:
   contact:
     name: GitHub Issues
     url: https://github.com/OpenFero/openfero/issues
-  description: Time when the alert ended
+  description: OpenFero is intended as an event-triggered job scheduler for code agnostic
+    recovery jobs.
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html

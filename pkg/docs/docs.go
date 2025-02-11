@@ -336,7 +336,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "OpenFero API",
-	Description:      "Time when the alert ended",
+	Description:      "OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",
