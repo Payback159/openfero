@@ -1,3 +1,16 @@
+// @title OpenFero API
+// @version 1.0
+// @description OpenFero is a Kubernetes based response automation system for Prometheus Alertmanager
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name GitHub Issues
+// @contact.url https://github.com/OpenFero/openfero/issues
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:8080
+// @BasePath /
 package main
 
 import (
@@ -14,10 +27,12 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/OpenFero/openfero/pkg/docs"
 	log "github.com/OpenFero/openfero/pkg/logging"
 	"github.com/OpenFero/openfero/pkg/metadata"
 	"github.com/ghodss/yaml"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -39,40 +54,57 @@ var (
 	date    = "unknown"
 )
 
-type (
-	jobInfo struct {
-		ConfigMapName string
-		JobName       string
-		Image         string
-	}
+// @Description Job information containing configuration and image details
+type jobInfo struct {
+	// @Description Name of the ConfigMap containing the job definition
+	ConfigMapName string `json:"configMapName"`
+	// @Description Name of the job
+	JobName string `json:"jobName"`
+	// @Description Container image used by the job
+	Image string `json:"image"`
+}
 
-	hookMessage struct {
-		Version           string            `json:"version"`
-		GroupKey          string            `json:"groupKey"`
-		Status            string            `json:"status"`
-		Receiver          string            `json:"receiver"`
-		GroupLabels       map[string]string `json:"groupLabels"`
-		CommonLabels      map[string]string `json:"commonLabels"`
-		CommonAnnotations map[string]string `json:"commonAnnotations"`
-		ExternalURL       string            `json:"externalURL"`
-		Alerts            []alert           `json:"alerts"`
-	}
+// @Description Webhook message received from Alertmanager
+type hookMessage struct {
+	// @Description Version of the Alertmanager message
+	Version string `json:"version"`
+	// @Description Key used to group alerts
+	GroupKey string `json:"groupKey"`
+	// @Description Status of the alert group (firing/resolved)
+	Status string `json:"status"`
+	// @Description Name of the receiver that handled the alert
+	Receiver string `json:"receiver"`
+	// @Description Labels common to all alerts in the group
+	GroupLabels map[string]string `json:"groupLabels"`
+	// @Description Labels common across all alerts
+	CommonLabels map[string]string `json:"commonLabels"`
+	// @Description Annotations common across all alerts
+	CommonAnnotations map[string]string `json:"commonAnnotations"`
+	// @Description External URL to the Alertmanager
+	ExternalURL string `json:"externalURL"`
+	// @Description List of alerts in the group
+	Alerts []alert `json:"alerts"`
+}
 
-	alert struct {
-		Labels      map[string]string `json:"labels"`
-		Annotations map[string]string `json:"annotations"`
-		StartsAt    string            `json:"startsAt,omitempty"`
-		EndsAt      string            `json:"EndsAt,omitempty"`
-	}
+// @Description Alert information from Alertmanager
+type alert struct {
+	// @Description Key-value pairs of alert labels
+	Labels map[string]string `json:"labels"`
+	// @Description Key-value pairs of alert annotations
+	Annotations map[string]string `json:"annotations"`
+	// @Description Time when the alert started firing
+	StartsAt string `json:"startsAt,omitempty"`
+	// @Description Time when the alert ended
+	EndsAt string `json:"EndsAt,omitempty"`
+}
 
-	clientsetStruct struct {
-		clientset               kubernetes.Clientset
-		jobDestinationNamespace string
-		configmapNamespace      string
-		configMapStore          cache.Store
-		jobStore                cache.Store
-	}
-)
+type clientsetStruct struct {
+	clientset               kubernetes.Clientset
+	jobDestinationNamespace string
+	configmapNamespace      string
+	configMapStore          cache.Store
+	jobStore                cache.Store
+}
 
 var alertStore []alert
 
@@ -289,6 +321,11 @@ func main() {
 	http.HandleFunc("GET /ui", uiHandler)
 	http.HandleFunc("GET /ui/jobs", server.jobsUIHandler)
 	http.HandleFunc("GET /assets/", assetsHandler)
+	http.Handle("GET /swagger/", httpSwagger.Handler(
+		httpSwagger.DeepLinking(true),
+		httpSwagger.DocExpansion("none"),
+		httpSwagger.DomID("swagger-ui"),
+	))
 
 	srv := &http.Server{
 		Addr:         *addr,
@@ -313,12 +350,25 @@ func stringWithCharset(length int, charset string) string {
 	return string(randombytes)
 }
 
+// @Summary Get health status
+// @Description Get the health status of the OpenFero service
+// @Tags health
+// @Produce json
+// @Success 200
+// @Router /healthz [get]
 // handling healthness probe
 func (server *clientsetStruct) healthzGetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentType, applicationJSON)
 	w.WriteHeader(http.StatusOK)
 }
 
+// @Summary Get readiness status
+// @Description Get the readiness status of the OpenFero service
+// @Tags health
+// @Produce json
+// @Success 200
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /readiness [get]
 // handling readiness probe
 func (server *clientsetStruct) readinessGetHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := server.clientset.CoreV1().ConfigMaps(server.configmapNamespace).List(context.TODO(), metav1.ListOptions{})
@@ -331,6 +381,12 @@ func (server *clientsetStruct) readinessGetHandler(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusOK)
 }
 
+// @Summary Get alerts
+// @Description Get list of alerts
+// @Tags alerts
+// @Produce json
+// @Success 200 {string} string "OK"
+// @Router /alerts [get]
 // Handling get requests to listen received alerts
 func (server *clientsetStruct) alertsGetHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 	// Alertmanager expects an 200 OK response, otherwise send_resolved will never work
@@ -344,6 +400,15 @@ func (server *clientsetStruct) alertsGetHandler(httpwriter http.ResponseWriter, 
 	}
 }
 
+// @Summary Process incoming alerts
+// @Description Process alerts received from Alertmanager
+// @Tags alerts
+// @Accept json
+// @Produce json
+// @Param message body hookMessage true "Alert message"
+// @Success 200
+// @Failure 400 {string} string "Bad Request"
+// @Router /alerts [post]
 // Handling the Alertmanager Post-Requests
 func (server *clientsetStruct) alertsPostHandler(httpwriter http.ResponseWriter, httprequest *http.Request) {
 
@@ -573,6 +638,14 @@ func alertMatchesQuery(alert alert, query string) bool {
 	return false
 }
 
+// @Summary Serve static assets
+// @Description Serve static assets like CSS and JavaScript files
+// @Tags assets
+// @Produce plain
+// @Param path path string true "Asset path"
+// @Success 200 {file} file
+// @Failure 400 {string} string "Bad Request"
+// @Router /assets/{path} [get]
 func assetsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug("Called asset " + r.URL.Path)
 	// set content type based on file extension
@@ -623,6 +696,14 @@ func verifyPath(path string) (string, error) {
 	return absPath, nil
 }
 
+// @Summary Get alert store
+// @Description Get the stored alerts with optional filtering
+// @Tags alerts
+// @Produce json
+// @Param q query string false "Search query to filter alerts"
+// @Success 200 {array} alert
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /alertStore [get]
 // function which provides alerts array to the getHandler
 func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *http.Request) {
 	// Get search query parameter
@@ -638,6 +719,13 @@ func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *ht
 	}
 }
 
+// @Summary Get UI page
+// @Description Get the main UI page
+// @Tags ui
+// @Produce html
+// @Success 200 {string} string "HTML page"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /ui [get]
 // function which provides the UI to the user
 func uiHandler(w http.ResponseWriter, r *http.Request) {
 	var alerts []alert
@@ -689,6 +777,13 @@ func getAlerts(query string) []alert {
 	return alerts
 }
 
+// @Summary Get jobs UI page
+// @Description Get the jobs overview UI page
+// @Tags ui
+// @Produce html
+// @Success 200 {string} string "HTML page"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /ui/jobs [get]
 func (server *clientsetStruct) jobsUIHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentType, "text/html")
 
