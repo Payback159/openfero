@@ -1,6 +1,6 @@
 // @title OpenFero API
 // @version 1.0
-// @description OpenFero is a Kubernetes based response automation system for Prometheus Alertmanager
+// @description OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.
 // @termsOfService http://swagger.io/terms/
 
 // @contact.name GitHub Issues
