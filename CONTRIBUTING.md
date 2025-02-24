@@ -34,3 +34,9 @@ goreleaser healthcheck
 ```bash
 curl -X POST -H "Content-Type: application/json" -d @./test/alerts.json http://localhost:8080/alerts
 ```
+
+## Update Swagger-Docs
+
+```bash
+swag init --generalInfo main.go --output ./pkg/docs
+```

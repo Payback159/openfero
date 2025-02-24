@@ -1,0 +1,219 @@
+basePath: /
+definitions:
+  main.alert:
+    description: Alert information from Alertmanager
+    properties:
+      EndsAt:
+        description: '@Description Time when the alert ended'
+        type: string
+      annotations:
+        additionalProperties:
+          type: string
+        description: '@Description Key-value pairs of alert annotations'
+        type: object
+      labels:
+        additionalProperties:
+          type: string
+        description: '@Description Key-value pairs of alert labels'
+        type: object
+      startsAt:
+        description: '@Description Time when the alert started firing'
+        type: string
+    type: object
+  main.hookMessage:
+    description: Webhook message received from Alertmanager
+    properties:
+      alerts:
+        description: '@Description List of alerts in the group'
+        items:
+          $ref: '#/definitions/main.alert'
+        type: array
+      commonAnnotations:
+        additionalProperties:
+          type: string
+        description: '@Description Annotations common across all alerts'
+        type: object
+      commonLabels:
+        additionalProperties:
+          type: string
+        description: '@Description Labels common across all alerts'
+        type: object
+      externalURL:
+        description: '@Description External URL to the Alertmanager'
+        type: string
+      groupKey:
+        description: '@Description Key used to group alerts'
+        type: string
+      groupLabels:
+        additionalProperties:
+          type: string
+        description: '@Description Labels common to all alerts in the group'
+        type: object
+      receiver:
+        description: '@Description Name of the receiver that handled the alert'
+        type: string
+      status:
+        description: '@Description Status of the alert group (firing/resolved)'
+        type: string
+      version:
+        description: '@Description Version of the Alertmanager message'
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: GitHub Issues
+    url: https://github.com/OpenFero/openfero/issues
+  description: OpenFero is intended as an event-triggered job scheduler for code agnostic
+    recovery jobs.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: OpenFero API
+  version: "1.0"
+paths:
+  /alertStore:
+    get:
+      description: Get the stored alerts with optional filtering
+      parameters:
+      - description: Search query to filter alerts
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.alert'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get alert store
+      tags:
+      - alerts
+  /alerts:
+    get:
+      description: Get list of alerts
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      summary: Get alerts
+      tags:
+      - alerts
+    post:
+      consumes:
+      - application/json
+      description: Process alerts received from Alertmanager
+      parameters:
+      - description: Alert message
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/main.hookMessage'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Process incoming alerts
+      tags:
+      - alerts
+  /assets/{path}:
+    get:
+      description: Serve static assets like CSS and JavaScript files
+      parameters:
+      - description: Asset path
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Serve static assets
+      tags:
+      - assets
+  /healthz:
+    get:
+      description: Get the health status of the OpenFero service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Get health status
+      tags:
+      - health
+  /readiness:
+    get:
+      description: Get the readiness status of the OpenFero service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get readiness status
+      tags:
+      - health
+  /ui:
+    get:
+      description: Get the main UI page
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML page
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get UI page
+      tags:
+      - ui
+  /ui/jobs:
+    get:
+      description: Get the jobs overview UI page
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML page
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get jobs UI page
+      tags:
+      - ui
+swagger: "2.0"
