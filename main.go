@@ -58,7 +58,7 @@ type hookMessage struct {
 	// @Description Key used to group alerts
 	GroupKey string `json:"groupKey"`
 	// @Description Status of the alert group (firing/resolved)
-	Status string `json:"status"`
+	Status string `json:"status" enum:"firing,resolved" example:"firing"`
 	// @Description Name of the receiver that handled the alert
 	Receiver string `json:"receiver"`
 	// @Description Labels common to all alerts in the group

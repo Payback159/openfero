@@ -318,7 +318,8 @@ const docTemplate = `{
                 },
                 "status": {
                     "description": "@Description Status of the alert group (firing/resolved)",
-                    "type": "string"
+                    "type": "string",
+                    "example": "firing"
                 },
                 "version": {
                     "description": "@Description Version of the Alertmanager message",

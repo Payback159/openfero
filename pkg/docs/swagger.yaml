@@ -54,6 +54,7 @@ definitions:
         type: string
       status:
         description: '@Description Status of the alert group (firing/resolved)'
+        example: firing
         type: string
       version:
         description: '@Description Version of the Alertmanager message'
