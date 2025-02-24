@@ -1,74 +1,96 @@
+# .github/workflows/release.yml
 name: release
 
 on:
-  pull_request:
-    types: [closed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "New tag"
+        required: true
 
 permissions:
   contents: read
 
 env:
+  # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  release:
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'prepare-release-')
+  goreleaser:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Extract tag from branch name
-        id: get-tag
-        run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          TAG=${BRANCH_NAME#prepare-release-}
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Create and push tag
-        run: |
-          git tag ${{ steps.get-tag.outputs.tag }}
-          git push origin ${{ steps.get-tag.outputs.tag }}
+      - run: git tag ${{ github.event.inputs.tag }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version: stable
 
       - name: Setup Docker buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
 
       - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
+        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
         with:
+          # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
+          # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
 
-      - name: Package and push charts
+      - name: Package charts
+        id: chart-releaser
         run: |
-          helm package charts/* --destination .cr-release-packages
+          # Get current version and calculate new patch version
+          CURRENT_VERSION=$(grep '^version:' charts/openfero/Chart.yaml | awk '{print $2}')
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
           
-          shopt -s nullglob
-          for pkg in .cr-release-packages/*; do
-            if [ -z "${pkg:-}" ]; then
-              break
-            fi
-            helm push "${pkg}" "oci://ghcr.io/openfero/openfero/charts"
-          done
+          # Update both version and appVersion
+          sed -i "s/^version: .*/version: $NEW_VERSION/g" charts/openfero/Chart.yaml
+          sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
+          
+          helm package charts/* --destination .cr-release-packages
+
+      - name: Push charts to GHCR
+        id: push-charts
+        run: |
+           shopt -s nullglob
+           for pkg in .cr-release-packages/*; do
+             if [ -z "${pkg:-}" ]; then
+               break
+             fi
+             helm push "${pkg}" "oci://ghcr.io/openfero/openfero/charts"
+           done
+
+      - name: Commit Chart.yaml changes
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add charts/openfero/Chart.yaml
+          git commit -m "chore: bump chart version and app version"
+          git push origin main
