@@ -3,10 +3,20 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestMain(m *testing.M) {
+	// Initialize logger before running tests
+	if err := initLogger("debug"); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
 
 func TestSanitizeInput(t *testing.T) {
 	tests := []struct {
@@ -105,42 +115,44 @@ func BenchmarkStringWithCharset(b *testing.B) {
 func TestSaveAlert(t *testing.T) {
 	tests := []struct {
 		name           string
-		initialAlerts  []alert
+		initialAlerts  []alertStoreEntry
 		newAlert       alert
-		expectedAlerts []alert
+		newStatus      string
+		expectedStore  []alertStoreEntry
 		alertStoreSize int
 	}{
 		{
 			name: "Add alert to non-full store",
-			initialAlerts: []alert{
-				{Labels: map[string]string{"alertname": "alert1"}},
+			initialAlerts: []alertStoreEntry{
+				{
+					Alert:  alert{Labels: map[string]string{"alertname": "alert1"}},
+					Status: "firing",
+				},
 			},
-			newAlert: alert{Labels: map[string]string{"alertname": "alert2"}},
-			expectedAlerts: []alert{
-				{Labels: map[string]string{"alertname": "alert1"}},
-				{Labels: map[string]string{"alertname": "alert2"}},
+			newAlert:  alert{Labels: map[string]string{"alertname": "alert2"}},
+			newStatus: "firing",
+			expectedStore: []alertStoreEntry{
+				{
+					Alert:  alert{Labels: map[string]string{"alertname": "alert1"}},
+					Status: "firing",
+				},
+				{
+					Alert:  alert{Labels: map[string]string{"alertname": "alert2"}},
+					Status: "firing",
+				},
 			},
 			alertStoreSize: 10,
 		},
-		// {
-		// 	name: "Add alert to full store",
-		// 	initialAlerts: []alert{
-		// 		{Labels: map[string]string{"alertname": "alert1"}},
-		// 		{Labels: map[string]string{"alertname": "alert2"}},
-		// 	},
-		// 	newAlert: alert{Labels: map[string]string{"alertname": "alert3"}},
-		// 	expectedAlerts: []alert{
-		// 		{Labels: map[string]string{"alertname": "alert2"}},
-		// 		{Labels: map[string]string{"alertname": "alert3"}},
-		// 	},
-		// 	alertStoreSize: 2,
-		// },
 		{
 			name:          "Add alert to empty store",
-			initialAlerts: []alert{},
+			initialAlerts: []alertStoreEntry{},
 			newAlert:      alert{Labels: map[string]string{"alertname": "alert1"}},
-			expectedAlerts: []alert{
-				{Labels: map[string]string{"alertname": "alert1"}},
+			newStatus:     "firing",
+			expectedStore: []alertStoreEntry{
+				{
+					Alert:  alert{Labels: map[string]string{"alertname": "alert1"}},
+					Status: "firing",
+				},
 			},
 			alertStoreSize: 10,
 		},
@@ -148,34 +160,45 @@ func TestSaveAlert(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			alertStore = make([]alert, 0, tt.alertStoreSize)
+			// Initialize the alert store
+			alertStore = make([]alertStoreEntry, 0, tt.alertStoreSize)
 			alertStore = append(alertStore, tt.initialAlerts...)
-			copy(alertStore, tt.initialAlerts)
 
 			server := &clientsetStruct{}
-			server.saveAlert(tt.newAlert)
+			server.saveAlert(tt.newAlert, tt.newStatus)
 
-			if !reflect.DeepEqual(alertStore, tt.expectedAlerts) {
-				t.Errorf("saveAlert() = %v; want %v", alertStore, tt.expectedAlerts)
+			// Compare only the Alert and Status fields, ignore Timestamp
+			for i := range alertStore {
+				if i < len(tt.expectedStore) {
+					if !reflect.DeepEqual(alertStore[i].Alert, tt.expectedStore[i].Alert) ||
+						alertStore[i].Status != tt.expectedStore[i].Status {
+						t.Errorf("saveAlert() got = %v, want %v", alertStore[i], tt.expectedStore[i])
+					}
+				}
+			}
+
+			if len(alertStore) != len(tt.expectedStore) {
+				t.Errorf("saveAlert() store length = %d, want %d", len(alertStore), len(tt.expectedStore))
 			}
 		})
 	}
 }
 
 func BenchmarkSaveAlert(b *testing.B) {
-	initialAlerts := []alert{
-		{Labels: map[string]string{"alertname": "alert1"}},
-		{Labels: map[string]string{"alertname": "alert2"}},
+	initialAlerts := []alertStoreEntry{
+		{Alert: alert{Labels: map[string]string{"alertname": "alert1"}}, Status: "firing", Timestamp: time.Now()},
+		{Alert: alert{Labels: map[string]string{"alertname": "alert2"}}, Status: "firing", Timestamp: time.Now()},
 	}
 	newAlert := alert{Labels: map[string]string{"alertname": "alert3"}}
+	newStatus := "firing"
 	alertStoreSize := 10
 
 	for i := 0; i < b.N; i++ {
-		alertStore = make([]alert, len(initialAlerts), alertStoreSize)
+		alertStore = make([]alertStoreEntry, len(initialAlerts), alertStoreSize)
 		copy(alertStore, initialAlerts)
 
 		server := &clientsetStruct{}
-		server.saveAlert(newAlert)
+		server.saveAlert(newAlert, newStatus)
 	}
 }
 

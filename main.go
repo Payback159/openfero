@@ -211,6 +211,21 @@ func initJobInformer(clientset *kubernetes.Clientset, jobDestinationNamespace st
 
 }
 
+// initLogger initializes the logger with the given log level
+func initLogger(logLevel string) error {
+	var cfg zap.Config
+	switch strings.ToLower(logLevel) {
+	case "debug":
+		cfg = zap.NewDevelopmentConfig()
+	case "info":
+		cfg = zap.NewProductionConfig()
+	default:
+		return fmt.Errorf("invalid log level specified: %s", logLevel)
+	}
+
+	return log.SetConfig(cfg)
+}
+
 // @title OpenFero API
 // @version 1.0
 // @description OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.
@@ -242,18 +257,7 @@ func main() {
 	alertStore = make([]alertStoreEntry, 0, *alertStoreSize)
 
 	// configure log
-	var cfg zap.Config
-	switch strings.ToLower(*logLevel) {
-	case "debug":
-		cfg = zap.NewDevelopmentConfig()
-	case "info":
-		cfg = zap.NewProductionConfig()
-	default:
-		log.Fatal("Invalid log level specified")
-	}
-
-	// activate json logging
-	if log.SetConfig(cfg) != nil {
+	if err := initLogger(*logLevel); err != nil {
 		log.Fatal("Could not set log configuration")
 	}
 
