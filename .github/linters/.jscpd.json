@@ -4,6 +4,7 @@
     "**/test/**",
     "**/charts/**",
     "**/node_modules/**",
-    "**/web/assets/js/bootstrap.min.js"
+    "**/web/assets/js/bootstrap.min.js",
+    "**/pkg/docs/swagger.json"
   ]
 }
