@@ -99,20 +99,6 @@ type alertStoreEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-type clientsetStruct struct {
-	clientset               kubernetes.Clientset
-	jobDestinationNamespace string
-	configmapNamespace      string
-	configMapStore          cache.Store
-	jobStore                cache.Store
-}
-
-type alertStoreEntry struct {
-	Alert     alert     `json:"alert"`
-	Status    string    `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
 var alertStore []alertStoreEntry
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -253,8 +239,6 @@ func initLogger(logLevel string) error {
 
 // @host localhost:8080
 // @BasePath /
-=======
->>>>>>> 95fe9006e805506f06136f58382e9c761d884aa3
 func main() {
 
 	// Parse command line arguments
