@@ -104,16 +104,26 @@ var alertStore []alertStoreEntry
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 func initKubeClient(kubeconfig *string) *kubernetes.Clientset {
+	var config *rest.Config
+	var err error
 
-	//use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	// Try in-cluster config first
+	config, err = rest.InClusterConfig()
 	if err != nil {
-		log.Fatal("Could not read k8s configuration: %s", zap.String("error", err.Error()))
+		log.Debug("In-cluster configuration not available, trying kubeconfig file")
+		// Use kubeconfig file
+		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+		if err != nil {
+			log.Fatal("Could not create k8s configuration", zap.String("error", err.Error()))
+		}
+		log.Info("Using kubeconfig file for cluster access")
+	} else {
+		log.Info("Using in-cluster configuration")
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatal("Could not create k8s client: %s", zap.String("error", err.Error()))
+		log.Fatal("Could not create k8s client", zap.String("error", err.Error()))
 	}
 
 	return clientset
