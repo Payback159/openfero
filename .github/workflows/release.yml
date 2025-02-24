@@ -62,7 +62,18 @@ jobs:
       - name: Package charts
         id: chart-releaser
         run: |
+          # Get current version and calculate new patch version
+          CURRENT_VERSION=$(grep '^version:' charts/openfero/Chart.yaml | awk '{print $2}')
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          
+          # Update both version and appVersion
+          sed -i "s/^version: .*/version: $NEW_VERSION/g" charts/openfero/Chart.yaml
           sed -i "s/^appVersion: .*/appVersion: ${{ github.event.inputs.tag }}/g" charts/openfero/Chart.yaml
+          
           helm package charts/* --destination .cr-release-packages
 
       - name: Push charts to GHCR
@@ -75,3 +86,11 @@ jobs:
              fi
              helm push "${pkg}" "oci://ghcr.io/openfero/openfero/charts"
            done
+
+      - name: Commit Chart.yaml changes
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add charts/openfero/Chart.yaml
+          git commit -m "chore: bump chart version and app version"
+          git push origin main
