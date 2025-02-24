@@ -93,7 +93,13 @@ type clientsetStruct struct {
 	jobStore                cache.Store
 }
 
-var alertStore []alert
+type alertStoreEntry struct {
+	Alert     alert     `json:"alert"`
+	Status    string    `json:"status"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+var alertStore []alertStoreEntry
 
 const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
@@ -205,6 +211,21 @@ func initJobInformer(clientset *kubernetes.Clientset, jobDestinationNamespace st
 
 }
 
+// initLogger initializes the logger with the given log level
+func initLogger(logLevel string) error {
+	var cfg zap.Config
+	switch strings.ToLower(logLevel) {
+	case "debug":
+		cfg = zap.NewDevelopmentConfig()
+	case "info":
+		cfg = zap.NewProductionConfig()
+	default:
+		return fmt.Errorf("invalid log level specified: %s", logLevel)
+	}
+
+	return log.SetConfig(cfg)
+}
+
 // @title OpenFero API
 // @version 1.0
 // @description OpenFero is intended as an event-triggered job scheduler for code agnostic recovery jobs.
@@ -233,21 +254,10 @@ func main() {
 	flag.Parse()
 
 	// Set the alert store size
-	alertStore = make([]alert, 0, *alertStoreSize)
+	alertStore = make([]alertStoreEntry, 0, *alertStoreSize)
 
 	// configure log
-	var cfg zap.Config
-	switch strings.ToLower(*logLevel) {
-	case "debug":
-		cfg = zap.NewDevelopmentConfig()
-	case "info":
-		cfg = zap.NewProductionConfig()
-	default:
-		log.Fatal("Invalid log level specified")
-	}
-
-	// activate json logging
-	if log.SetConfig(cfg) != nil {
+	if err := initLogger(*logLevel); err != nil {
 		log.Fatal("Could not set log configuration")
 	}
 
@@ -451,7 +461,7 @@ func sanitizeInput(input string) string {
 }
 
 func (server *clientsetStruct) createResponseJob(alert alert, status string, _ http.ResponseWriter) {
-	server.saveAlert(alert)
+	server.saveAlert(alert, status)
 	alertname := sanitizeInput(alert.Labels["alertname"])
 	responsesConfigmap := strings.ToLower("openfero-" + alertname + "-" + status)
 	log.Debug("Try to load configmap " + responsesConfigmap)
@@ -568,47 +578,53 @@ func addJobLabels(jobObject *batchv1.Job) {
 }
 
 // function which saves the alert in the alertStore
-func (server *clientsetStruct) saveAlert(alert alert) {
+func (server *clientsetStruct) saveAlert(alert alert, status string) {
+	log.Debug("Saving alert in alert store")
+	entry := alertStoreEntry{
+		Alert:     alert,
+		Status:    status,
+		Timestamp: time.Now(),
+	}
 	if len(alertStore) < cap(alertStore) {
-		alertStore = append(alertStore, alert)
+		alertStore = append(alertStore, entry)
 	} else {
 		log.Debug("Alert store is full, dropping oldest alert")
 		copy(alertStore, alertStore[1:])
-		alertStore[len(alertStore)-1] = alert
+		alertStore[len(alertStore)-1] = entry
 	}
 }
 
 // function which filters alerts based on the query
-func filterAlerts(alerts []alert, query string) []alert {
-	var filteredAlerts []alert
-	// Return all alerts if query is empty
-	if query == "" {
-		return alerts
-	}
+func filterAlerts(alerts []alertStoreEntry, query string) []alertStoreEntry {
+	var filteredAlerts []alertStoreEntry
 
-	for _, alert := range alerts {
-		if alertMatchesQuery(alert, query) {
-			filteredAlerts = append(filteredAlerts, alert)
+	for _, entry := range alerts {
+		if alertMatchesQuery(entry, query) {
+			filteredAlerts = append(filteredAlerts, entry)
 		}
 	}
 	return filteredAlerts
 }
 
-func alertMatchesQuery(alert alert, query string) bool {
+func alertMatchesQuery(entry alertStoreEntry, query string) bool {
 	query = strings.ToLower(query)
-	alertname := strings.ToLower(alert.Labels["alertname"])
+	alertname := strings.ToLower(entry.Alert.Labels["alertname"])
 
 	// Create a channel to receive match results
-	matchChan := make(chan bool, 3)
+	matchChan := make(chan bool, 4)
 
 	// Check alertname concurrently
 	go func() {
 		matchChan <- strings.Contains(alertname, query)
 	}()
 
+	go func() {
+		matchChan <- strings.Contains(entry.Status, query)
+	}()
+
 	// Check labels concurrently
 	go func() {
-		for _, value := range alert.Labels {
+		for _, value := range entry.Alert.Labels {
 			if strings.Contains(strings.ToLower(value), query) {
 				matchChan <- true
 				return
@@ -619,7 +635,7 @@ func alertMatchesQuery(alert alert, query string) bool {
 
 	// Check annotations concurrently
 	go func() {
-		for _, value := range alert.Annotations {
+		for _, value := range entry.Alert.Annotations {
 			if strings.Contains(strings.ToLower(value), query) {
 				matchChan <- true
 				return
@@ -629,7 +645,7 @@ func alertMatchesQuery(alert alert, query string) bool {
 	}()
 
 	// Collect results from all goroutines
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		if <-matchChan {
 			return true
 		}
@@ -708,8 +724,13 @@ func verifyPath(path string) (string, error) {
 func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *http.Request) {
 	// Get search query parameter
 	query := r.URL.Query().Get("q")
+	var alerts []alertStoreEntry
 
-	alerts := filterAlerts(alertStore, query)
+	if query != "" {
+		alerts = filterAlerts(alertStore, query)
+	} else {
+		alerts = alertStore
+	}
 
 	w.Header().Set(contentType, applicationJSON)
 	err := json.NewEncoder(w).Encode(alerts)
@@ -728,7 +749,7 @@ func (server *clientsetStruct) alertStoreGetHandler(w http.ResponseWriter, r *ht
 // @Router /ui [get]
 // function which provides the UI to the user
 func uiHandler(w http.ResponseWriter, r *http.Request) {
-	var alerts []alert
+	var alerts []alertStoreEntry
 	w.Header().Set(contentType, "text/html")
 	//Parse the templates in web/templates/
 	tmpl, err := template.ParseFiles(
@@ -747,7 +768,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Title      string
 		ShowSearch bool
-		Alerts     []alert
+		Alerts     []alertStoreEntry
 	}{
 		Title:      "Alerts",
 		ShowSearch: true,
@@ -763,13 +784,13 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // function which gets alerts from the alertStore
-func getAlerts(query string) []alert {
+func getAlerts(query string) []alertStoreEntry {
 	resp, err := http.Get("http://localhost:8080/alertStore?q=" + query)
 	if err != nil {
 		log.Error("error getting alerts: ", zap.String("error", err.Error()))
 	}
 	defer resp.Body.Close()
-	var alerts []alert
+	var alerts []alertStoreEntry
 	err = json.NewDecoder(resp.Body).Decode(&alerts)
 	if err != nil {
 		log.Error("error decoding alerts: ", zap.String("error", err.Error()))
