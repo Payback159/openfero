@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "openfero.fullname" . }}-test-webhook"
+  labels:
+    {{- include "openfero.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+spec:
+  containers:
+    - name: test-api
+      image: curlimages/curl:latest
+      command: ["/bin/sh"]
+      args:
+        - -c
+        - |
+          # Create a test alert
+          TEST_ALERT='{"summary":"Test Alert","source":"helm-test","severity":"info"}'
+          CREATE_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
+            http://{{ include "openfero.fullname" . }}:{{ .Values.service.port }}/alerts \
+            -d "$TEST_ALERT")
+          
+          # Wait for alert processing
+          sleep 5
+          
+          # Check if alert exists in store
+          STORED_ALERTS=$(curl -s \
+            http://{{ include "openfero.fullname" . }}:{{ .Values.service.port }}/alertStore)
+          
+          # Check if our test alert is in the response
+          if echo "$STORED_ALERTS" | grep -q "Test Alert"; then
+            echo "Test passed: Alert was successfully created and stored"
+            exit 0
+          else
+            echo "Test failed: Alert was not found in the store"
+            exit 1
+          fi
+  restartPolicy: Never
