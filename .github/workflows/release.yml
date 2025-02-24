@@ -86,11 +86,3 @@ jobs:
              fi
              helm push "${pkg}" "oci://ghcr.io/openfero/openfero/charts"
            done
-
-      - name: Commit Chart.yaml changes
-        run: |
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
-          git add charts/openfero/Chart.yaml
-          git commit -m "chore: bump chart version and app version"
-          git push origin main
