@@ -6,11 +6,43 @@ Open Fero is a little play on words from the Latin "opem fero", which means "to 
 
 ## Getting started
 
-The recommended method is installation via a helm chart.
+The recommended method is installation via helm chart.
 
 ```bash
 helm pull oci://ghcr.io/openfero/openfero/charts/openfero --version 0.1.0
 helm install openfero oci://ghcr.io/openfero/openfero/charts/openfero --version 0.1.0
+```
+
+### Testing the Installation
+
+You can test if OpenFero is working properly in multiple ways:
+
+#### Using the Swagger UI
+
+Access the Swagger UI at `http://openfero-service:8080/swagger/` to interact with the API directly through a web interface. The Swagger UI provides a complete documentation of all available endpoints and allows you to test them directly.
+
+#### Using the OpenFero UI
+
+The OpenFero UI is available at `http://openfero-service:8080/ui/` and provides:
+
+- Overview of all received alerts and their current status
+- Configuration viewer for operarios definitions
+
+#### Using curl
+
+```bash
+curl -X POST http://openfero-service:8080/alert \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "status": "firing",
+    "alerts": [{
+      "status": "firing",
+      "labels": {
+        "alertname": "TestAlert",
+        "severity": "warning"
+      }
+    }]
+  }'
 ```
 
 ## Component-Diagram

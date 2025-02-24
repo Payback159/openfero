@@ -21,14 +21,28 @@
             <div class="container py-3" hx-swap="outerHTML">
                 <div class="card shadow-sm">
                     <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">{{ .Labels.alertname }}</h5>
+                        <h5 class="mb-0">{{ .Alert.Labels.alertname }}</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
                             <h6 class="card-subtitle mb-3">
+                                <i class="bi bi-info-square-fill me-2"></i>Metadata
+                            </h6>
+                            <div class="ms-4">
+                                <strong>Timestamp:</strong> {{ .Timestamp }}
+                            </div>
+                            <div class="ms-4">
+                                <strong>Status:</strong> {{ .Status }}
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div class="mb-4">
+                            <h6 class="card-subtitle mb-3">
                                 <i class="bi bi-tags-fill me-2"></i>Labels
                             </h6>
-                            {{ range $key, $value := .Labels }}
+                            {{ range $key, $value := .Alert.Labels }}
                             <div class="ms-4">
                                 <strong>{{ $key }}:</strong> {{ $value }}
                             </div>
@@ -43,7 +57,7 @@
                             <h6 class="card-subtitle mb-3">
                                 <i class="bi bi-info-circle-fill me-2"></i>Annotations
                             </h6>
-                            {{ range $key, $value := .Annotations }}
+                            {{ range $key, $value := .Alert.Annotations }}
                             <div class="ms-4">
                                 <strong>{{ $key }}:</strong> {{ $value }}
                             </div>
