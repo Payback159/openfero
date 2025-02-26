@@ -5,9 +5,9 @@ go 1.23.0
 require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/swaggo/swag v1.16.4
-	k8s.io/api v0.32.1
-	k8s.io/apimachinery v0.32.1
-	k8s.io/client-go v0.32.1
+	k8s.io/api v0.32.2
+	k8s.io/apimachinery v0.32.2
+	k8s.io/client-go v0.32.2
 )
 
 require (
